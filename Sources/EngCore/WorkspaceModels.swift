@@ -26,6 +26,135 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
   }
 }
 
+public struct WorkspacePage: Codable, Equatable, Sendable {
+  public let snapshotID: UUID
+  public let bridgeName: String
+  public let projects: [ProjectSummary]
+  public let generatedAt: Date
+  public let pageIndex: Int
+  public let pageCount: Int
+
+  public init(
+    snapshotID: UUID,
+    bridgeName: String,
+    projects: [ProjectSummary],
+    generatedAt: Date,
+    pageIndex: Int,
+    pageCount: Int
+  ) {
+    self.snapshotID = snapshotID
+    self.bridgeName = bridgeName
+    self.projects = projects
+    self.generatedAt = generatedAt
+    self.pageIndex = pageIndex
+    self.pageCount = pageCount
+  }
+}
+
+public enum WorkspacePager {
+  public static func pages(
+    for snapshot: WorkspaceSnapshot,
+    maxThreadsPerPage: Int = 100
+  ) -> [WorkspacePage] {
+    let capacity = max(1, maxThreadsPerPage)
+    var drafts: [[ProjectSummary]] = []
+    var current: [ProjectSummary] = []
+    var currentThreadCount = 0
+
+    func fragment(_ project: ProjectSummary, threads: [ThreadSummary]) -> ProjectSummary {
+      ProjectSummary(
+        id: project.id,
+        name: project.name,
+        repositoryRoot: project.repositoryRoot,
+        gitOrigin: project.gitOrigin,
+        threads: threads,
+        updatedAt: project.updatedAt
+      )
+    }
+
+    func flush() {
+      guard !current.isEmpty else { return }
+      drafts.append(current)
+      current = []
+      currentThreadCount = 0
+    }
+
+    for project in snapshot.projects {
+      if project.threads.isEmpty {
+        current.append(fragment(project, threads: []))
+        if current.count >= capacity { flush() }
+        continue
+      }
+
+      var offset = 0
+      while offset < project.threads.count {
+        if currentThreadCount == capacity { flush() }
+        let count = min(capacity - currentThreadCount, project.threads.count - offset)
+        let end = offset + count
+        current.append(fragment(project, threads: Array(project.threads[offset..<end])))
+        currentThreadCount += count
+        offset = end
+      }
+    }
+    flush()
+    if drafts.isEmpty { drafts = [[]] }
+
+    let snapshotID = UUID()
+    return drafts.enumerated().map { index, projects in
+      WorkspacePage(
+        snapshotID: snapshotID,
+        bridgeName: snapshot.bridgeName,
+        projects: projects,
+        generatedAt: snapshot.generatedAt,
+        pageIndex: index,
+        pageCount: drafts.count
+      )
+    }
+  }
+
+  public static func assemble(_ pages: [WorkspacePage]) -> WorkspaceSnapshot? {
+    guard let first = pages.first,
+      first.pageCount > 0,
+      pages.count == first.pageCount,
+      pages.allSatisfy({
+        $0.snapshotID == first.snapshotID
+          && $0.bridgeName == first.bridgeName
+          && $0.generatedAt == first.generatedAt
+          && $0.pageCount == first.pageCount
+          && $0.pageIndex >= 0
+          && $0.pageIndex < first.pageCount
+      }),
+      Set(pages.map(\.pageIndex)).count == first.pageCount
+    else { return nil }
+
+    var order: [String] = []
+    var projects: [String: ProjectSummary] = [:]
+    for page in pages.sorted(by: { $0.pageIndex < $1.pageIndex }) {
+      for fragment in page.projects {
+        if let existing = projects[fragment.id] {
+          projects[fragment.id] = ProjectSummary(
+            id: existing.id,
+            name: existing.name,
+            repositoryRoot: existing.repositoryRoot,
+            gitOrigin: existing.gitOrigin ?? fragment.gitOrigin,
+            threads: existing.threads + fragment.threads,
+            updatedAt: max(existing.updatedAt, fragment.updatedAt)
+          )
+        } else {
+          order.append(fragment.id)
+          projects[fragment.id] = fragment
+        }
+      }
+    }
+
+    return WorkspaceSnapshot(
+      bridgeName: first.bridgeName,
+      projects: order.compactMap { projects[$0] },
+      generatedAt: first.generatedAt
+    )
+  }
+}
+
 public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
   public let id: String
   public let name: String
@@ -185,6 +314,18 @@ public struct PendingActionOption: Codable, Equatable, Sendable, Identifiable {
   }
 }
 
+public struct PendingQuestion: Codable, Equatable, Sendable, Identifiable {
+  public let id: String
+  public let prompt: String
+  public let options: [PendingActionOption]
+
+  public init(id: String, prompt: String, options: [PendingActionOption] = []) {
+    self.id = id
+    self.prompt = prompt
+    self.options = options
+  }
+}
+
 public struct PendingAction: Codable, Equatable, Sendable, Identifiable {
   public let id: String
   public let threadID: String
@@ -192,6 +333,7 @@ public struct PendingAction: Codable, Equatable, Sendable, Identifiable {
   public let title: String
   public let detail: String
   public let options: [PendingActionOption]
+  public let questions: [PendingQuestion]
   public let createdAt: Date
 
   public init(
@@ -201,6 +343,7 @@ public struct PendingAction: Codable, Equatable, Sendable, Identifiable {
     title: String,
     detail: String,
     options: [PendingActionOption],
+    questions: [PendingQuestion] = [],
     createdAt: Date = Date()
   ) {
     self.id = id
@@ -209,6 +352,7 @@ public struct PendingAction: Codable, Equatable, Sendable, Identifiable {
     self.title = title
     self.detail = detail
     self.options = options
+    self.questions = questions
     self.createdAt = createdAt
   }
 }

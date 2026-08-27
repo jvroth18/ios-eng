@@ -111,4 +111,36 @@ struct AppServerMappingTests {
       CodexThreadService.directControlAvailable(
         statusType: "notLoaded", canAcceptDirectInput: true))
   }
+
+  @Test func preservesChoiceAndFreeFormUserInputQuestions() async throws {
+    let service = CodexThreadService(connection: AppServerConnection(), bridgeName: "Test Mac")
+    let action = try #require(
+      await service.recordServerRequest(
+        id: "rpc-input",
+        method: "item/tool/requestUserInput",
+        params: [
+          "threadId": "thread-1",
+          "questions": [
+            [
+              "id": "environment",
+              "header": "Target",
+              "question": "Which environment?",
+              "options": [
+                ["label": "Staging", "description": "Use test data"],
+                ["label": "Production", "description": "Use live data"],
+              ],
+            ],
+            [
+              "id": "note",
+              "header": "Note",
+              "question": "Add a note",
+            ],
+          ],
+        ]
+      )
+    )
+    #expect(action.questions.map(\.id) == ["environment", "note"])
+    #expect(action.questions[0].options.map(\.label) == ["Staging", "Production"])
+    #expect(action.questions[1].options.isEmpty)
+  }
 }

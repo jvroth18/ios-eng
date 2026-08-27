@@ -43,7 +43,13 @@ enum EngBridgeMain {
       }
 
       let nearby = NearbyServer()
-      let coordinator = BridgeCoordinator(nearby: nearby, service: service)
+      let coordinator = BridgeCoordinator(
+        nearby: nearby,
+        service: service,
+        statusHandler: { message in
+          FileHandle.standardOutput.write(Data("\(message)\n".utf8))
+        }
+      )
       await coordinator.start()
       let code = await coordinator.pairingCode
       let expiration = await coordinator.pairingExpiration

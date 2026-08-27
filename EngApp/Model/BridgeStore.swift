@@ -48,15 +48,26 @@ final class BridgeStore: ObservableObject {
   private let client: NearbyClient
   private let telemetrySampler = PhoneTelemetrySampler()
   private let demoMode: Bool
+  private let automaticPairingCode: String?
   private var telemetryTask: Task<Void, Never>?
   private var refreshTask: Task<Void, Never>?
   private var started = false
   private var pingSequence: UInt64 = 0
   private var pendingPings: [UInt64: Date] = [:]
   private var latestPhoneSample: PhoneTelemetrySample?
+  private var pendingWorkspaceID: UUID?
+  private var pendingWorkspacePages: [Int: WorkspacePage] = [:]
 
   init() {
-    demoMode = ProcessInfo.processInfo.arguments.contains("-eng-demo")
+    let arguments = ProcessInfo.processInfo.arguments
+    demoMode = arguments.contains("-eng-demo")
+    if let index = arguments.firstIndex(of: "-eng-pair-code"),
+      arguments.indices.contains(index + 1)
+    {
+      automaticPairingCode = arguments[index + 1]
+    } else {
+      automaticPairingCode = nil
+    }
     deviceID = Self.loadDeviceID()
     client = NearbyClient(displayName: UIDevice.current.name)
     client.setEventHandler { [weak self] event in
@@ -159,11 +170,12 @@ final class BridgeStore: ObservableObject {
     send(.approvalResponse(ApprovalResponse(requestID: requestID, decision: decision)))
   }
 
-  func answerUserInput(requestID: String, optionID: String) {
-    let components = optionID.split(separator: "::", maxSplits: 1).map(String.init)
-    let questionID = components.first ?? "answer"
-    let answer = components.count > 1 ? components[1] : optionID
-    send(.userInputResponse(UserInputResponse(requestID: requestID, answers: [questionID: answer])))
+  func answerUserInput(requestID: String, answers: [String: String]) {
+    let normalized = answers.mapValues {
+      $0.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    guard !normalized.isEmpty, normalized.values.allSatisfy({ !$0.isEmpty }) else { return }
+    send(.userInputResponse(UserInputResponse(requestID: requestID, answers: normalized)))
   }
 
   func dismissError() {
@@ -177,6 +189,12 @@ final class BridgeStore: ObservableObject {
       if case .connected = state {
         sendHello()
         attemptTrustedReconnect()
+        #if DEBUG
+          if let automaticPairingCode {
+            pairingCode = automaticPairingCode
+            pair()
+          }
+        #endif
       } else if case .disconnected = state {
         isPaired = false
       } else if case .failed(let message) = state {
@@ -212,6 +230,10 @@ final class BridgeStore: ObservableObject {
       }
     case .workspaceSnapshot(let snapshot):
       workspace = snapshot
+      pendingWorkspaceID = nil
+      pendingWorkspacePages = [:]
+    case .workspacePage(let page):
+      receive(page)
     case .threadDetail(let detail):
       threadDetail = detail
       isSending = false
@@ -231,6 +253,20 @@ final class BridgeStore: ObservableObject {
       .approvalResponse, .userInputResponse, .ping:
       break
     }
+  }
+
+  private func receive(_ page: WorkspacePage) {
+    if pendingWorkspaceID != page.snapshotID {
+      pendingWorkspaceID = page.snapshotID
+      pendingWorkspacePages = [:]
+    }
+    pendingWorkspacePages[page.pageIndex] = page
+    guard
+      let snapshot = WorkspacePager.assemble(Array(pendingWorkspacePages.values))
+    else { return }
+    workspace = snapshot
+    pendingWorkspaceID = nil
+    pendingWorkspacePages = [:]
   }
 
   private func mergeTimelineEvent(_ item: TimelineItem) {

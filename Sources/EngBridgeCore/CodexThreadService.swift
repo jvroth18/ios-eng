@@ -36,13 +36,14 @@ public actor CodexThreadService {
     self.bridgeName = bridgeName
   }
 
-  public func refreshWorkspace(limit: Int = 200) async throws -> WorkspaceSnapshot {
+  public func refreshWorkspace(limit: Int? = nil) async throws -> WorkspaceSnapshot {
     var cursor: String?
     var collected: [JSONValue] = []
 
     repeat {
+      let pageLimit = limit.map { min(max($0 - collected.count, 1), 100) } ?? 100
       var params: [String: JSONValue] = [
-        "limit": .number(Double(min(limit, 100))),
+        "limit": .number(Double(pageLimit)),
         "sortKey": "updated_at",
         "sortDirection": "desc",
         "sourceKinds": ["cli", "vscode", "appServer", "exec", "unknown"],
@@ -51,10 +52,11 @@ public actor CodexThreadService {
       let response = try await connection.request(method: "thread/list", params: .object(params))
       collected.append(contentsOf: response["data"]?.arrayValue ?? [])
       cursor = response["nextCursor"]?.stringValue
-    } while cursor != nil && collected.count < limit
+    } while cursor != nil && (limit.map { collected.count < $0 } ?? true)
 
     var records: [CodexThreadRecord] = []
-    for value in collected.prefix(limit) {
+    let selected = limit.map { Array(collected.prefix($0)) } ?? collected
+    for value in selected {
       guard let id = value["id"]?.stringValue,
         let cwd = value["cwd"]?.stringValue
       else { continue }
@@ -72,8 +74,8 @@ public actor CodexThreadService {
       let updated = Date(timeIntervalSince1970: value["updatedAt"]?.doubleValue ?? 0)
       let record = CodexThreadRecord(
         id: id,
-        name: value["name"]?.stringValue,
-        preview: value["preview"]?.stringValue ?? "",
+        name: value["name"]?.stringValue.map { String($0.prefix(240)) },
+        preview: String((value["preview"]?.stringValue ?? "").prefix(800)),
         cwd: cwd,
         repositoryRoot: root,
         gitOrigin: value["gitInfo"]?["originUrl"]?.stringValue,
@@ -339,17 +341,20 @@ public actor CodexThreadService {
       let questions = params["questions"]?.arrayValue ?? []
       let title = questions.first?["header"]?.stringValue ?? "Codex needs input"
       let detail = questions.compactMap { $0["question"]?.stringValue }.joined(separator: "\n\n")
-      let options: [PendingActionOption] = questions.flatMap { question -> [PendingActionOption] in
-        let questionID = question["id"]?.stringValue ?? "answer"
-        return (question["options"]?.arrayValue ?? []).compactMap {
-          option -> PendingActionOption? in
+      let pendingQuestions: [PendingQuestion] = questions.compactMap { question in
+        guard let questionID = question["id"]?.stringValue,
+          let prompt = question["question"]?.stringValue
+        else { return nil }
+        let options: [PendingActionOption] = (question["options"]?.arrayValue ?? []).compactMap {
+          option in
           guard let label = option["label"]?.stringValue else { return nil }
           return PendingActionOption(
-            id: "\(questionID)::\(label)",
+            id: label,
             label: label,
             detail: option["description"]?.stringValue
           )
         }
+        return PendingQuestion(id: questionID, prompt: prompt, options: options)
       }
       return PendingAction(
         id: requestID,
@@ -357,7 +362,8 @@ public actor CodexThreadService {
         kind: .userInput,
         title: title,
         detail: detail,
-        options: options
+        options: [],
+        questions: pendingQuestions
       )
     default:
       return nil

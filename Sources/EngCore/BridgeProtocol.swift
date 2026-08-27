@@ -1,7 +1,7 @@
 import Foundation
 
 public struct BridgeEnvelope: Codable, Equatable, Sendable, Identifiable {
-  public static let currentProtocolVersion = 1
+  public static let currentProtocolVersion = 2
 
   public let id: UUID
   public let sentAt: Date
@@ -21,6 +21,7 @@ public enum BridgeMessage: Equatable, Sendable {
   case refresh(RefreshRequest)
   case subscribe(ThreadSubscription)
   case workspaceSnapshot(WorkspaceSnapshot)
+  case workspacePage(WorkspacePage)
   case threadDetail(ThreadDetail)
   case timelineEvent(TimelineItem)
   case sendMessage(SendMessageRequest)
@@ -46,6 +47,7 @@ extension BridgeMessage: Codable {
     case refresh
     case subscribe
     case workspaceSnapshot
+    case workspacePage
     case threadDetail
     case timelineEvent
     case sendMessage
@@ -73,6 +75,8 @@ extension BridgeMessage: Codable {
       self = .subscribe(try container.decode(ThreadSubscription.self, forKey: .payload))
     case .workspaceSnapshot:
       self = .workspaceSnapshot(try container.decode(WorkspaceSnapshot.self, forKey: .payload))
+    case .workspacePage:
+      self = .workspacePage(try container.decode(WorkspacePage.self, forKey: .payload))
     case .threadDetail:
       self = .threadDetail(try container.decode(ThreadDetail.self, forKey: .payload))
     case .timelineEvent:
@@ -116,6 +120,9 @@ extension BridgeMessage: Codable {
       try container.encode(payload, forKey: .payload)
     case .workspaceSnapshot(let payload):
       try container.encode(Kind.workspaceSnapshot, forKey: .kind)
+      try container.encode(payload, forKey: .payload)
+    case .workspacePage(let payload):
+      try container.encode(Kind.workspacePage, forKey: .kind)
       try container.encode(payload, forKey: .payload)
     case .threadDetail(let payload):
       try container.encode(Kind.threadDetail, forKey: .kind)

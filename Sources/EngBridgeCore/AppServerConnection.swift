@@ -5,7 +5,9 @@ public enum AppServerInbound: Equatable, Sendable {
   case request(id: JSONValue, method: String, params: JSONValue)
 }
 
-public struct AppServerFailure: Error, Equatable, Sendable, CustomStringConvertible {
+public struct AppServerFailure: Error, Equatable, Sendable, CustomStringConvertible,
+  LocalizedError
+{
   public let code: Int?
   public let message: String
 
@@ -18,6 +20,8 @@ public struct AppServerFailure: Error, Equatable, Sendable, CustomStringConverti
     if let code { return "Codex App Server error \(code): \(message)" }
     return "Codex App Server error: \(message)"
   }
+
+  public var errorDescription: String? { description }
 }
 
 public actor AppServerConnection {

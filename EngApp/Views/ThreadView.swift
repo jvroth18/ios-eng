@@ -299,6 +299,7 @@ private struct ActivityCard: View {
 private struct PendingActionCard: View {
   @EnvironmentObject private var store: BridgeStore
   let action: PendingAction
+  @State private var answers: [String: String] = [:]
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
@@ -316,7 +317,31 @@ private struct PendingActionCard: View {
         .lineLimit(8)
         .textSelection(.enabled)
 
-      if action.options.isEmpty {
+      if action.kind == .userInput, !action.questions.isEmpty {
+        VStack(spacing: 12) {
+          ForEach(action.questions) { question in
+            PendingQuestionView(
+              question: question,
+              answer: Binding(
+                get: { answers[question.id, default: ""] },
+                set: { answers[question.id] = $0 }
+              )
+            )
+          }
+          Button {
+            store.answerUserInput(requestID: action.id, answers: answers)
+          } label: {
+            Text("Send answer")
+              .font(.subheadline.weight(.bold))
+              .frame(maxWidth: .infinity)
+              .padding(.vertical, 12)
+              .background(EngDesign.accent, in: RoundedRectangle(cornerRadius: 13))
+          }
+          .buttonStyle(.plain)
+          .disabled(!allQuestionsAnswered)
+          .opacity(allQuestionsAnswered ? 1 : 0.45)
+        }
+      } else if action.options.isEmpty {
         Text("Answer this request from the Mac session.")
           .font(.caption)
           .foregroundStyle(EngDesign.muted)
@@ -350,10 +375,55 @@ private struct PendingActionCard: View {
   }
 
   private func answer(_ option: PendingActionOption) {
-    if action.kind == .userInput {
-      store.answerUserInput(requestID: action.id, optionID: option.id)
-    } else if let decision = ApprovalDecision(rawValue: option.id) {
+    if let decision = ApprovalDecision(rawValue: option.id) {
       store.answerApproval(requestID: action.id, decision: decision)
     }
+  }
+
+  private var allQuestionsAnswered: Bool {
+    !action.questions.isEmpty
+      && action.questions.allSatisfy {
+        !(answers[$0.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      }
+  }
+}
+
+private struct PendingQuestionView: View {
+  let question: PendingQuestion
+  @Binding var answer: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(question.prompt)
+        .font(.subheadline.weight(.semibold))
+      if question.options.isEmpty {
+        TextField("Your answer", text: $answer, axis: .vertical)
+          .lineLimit(1...4)
+          .padding(11)
+          .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 12))
+      } else {
+        ForEach(question.options) { option in
+          Button {
+            answer = option.label
+          } label: {
+            HStack {
+              Image(systemName: answer == option.label ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(answer == option.label ? EngDesign.cyan : EngDesign.muted)
+              VStack(alignment: .leading, spacing: 2) {
+                Text(option.label).font(.subheadline.weight(.semibold))
+                if let detail = option.detail {
+                  Text(detail).font(.caption).foregroundStyle(EngDesign.muted)
+                }
+              }
+              Spacer()
+            }
+            .padding(11)
+            .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+          }
+          .buttonStyle(.plain)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }

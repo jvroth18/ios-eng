@@ -71,6 +71,52 @@ struct BridgeProtocolTests {
     }
   }
 
+  @Test func workspacePagesStaySmallAndReassembleLosslessly() throws {
+    let now = Date(timeIntervalSince1970: 1_787_000_000)
+    var threads: [ThreadSummary] = []
+    for index in 0..<245 {
+      let status: ThreadRuntimeStatus = index == 244 ? .active : .notLoaded
+      let control: ThreadControlLevel = index == 244 ? .live : .message
+      threads.append(
+        ThreadSummary(
+          id: "thread-\(index)",
+          title: "Thread \(index)",
+          preview: String(repeating: "diagnostic ", count: 70),
+          cwd: "/Users/jordan/Testing/ios-eng",
+          repositoryRoot: "/Users/jordan/Testing/ios-eng",
+          source: "cli",
+          status: status,
+          controlLevel: control,
+          updatedAt: now.addingTimeInterval(Double(-index))
+        )
+      )
+    }
+    let project = ProjectSummary(
+      id: "project-1",
+      name: "ios-eng",
+      repositoryRoot: "/Users/jordan/Testing/ios-eng",
+      threads: threads,
+      updatedAt: now
+    )
+    let snapshot = WorkspaceSnapshot(
+      bridgeName: "Jordan's MacBook",
+      projects: [project],
+      generatedAt: now
+    )
+
+    let pages = WorkspacePager.pages(for: snapshot, maxThreadsPerPage: 100)
+    #expect(pages.count == 3)
+    #expect(WorkspacePager.assemble(pages) == snapshot)
+
+    let encoder = JSONEncoder()
+    for page in pages {
+      let data = try encoder.encode(BridgeEnvelope(message: .workspacePage(page)))
+      #expect(data.count < 2 * 1_024 * 1_024)
+      let decoded = try JSONDecoder().decode(BridgeEnvelope.self, from: data)
+      #expect(decoded.message == BridgeMessage.workspacePage(page))
+    }
+  }
+
   @Test func outgoingTextIsNormalizedWithoutMutatingOriginal() {
     let request = SendMessageRequest(threadID: "thread-1", text: "  Continue from the phone. \n")
     #expect(request.text == "  Continue from the phone. \n")

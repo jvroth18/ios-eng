@@ -23,7 +23,8 @@ This repository was delivered in validated, incremental commits:
 3. Native iPhone app and Analytics view.
 4. End-to-end simulator/device validation and installation handoff.
 
-See [Architecture](docs/ARCHITECTURE.md) and [Acceptance](docs/ACCEPTANCE.md).
+See [Architecture](docs/ARCHITECTURE.md), [Acceptance](docs/ACCEPTANCE.md), and
+[Validation](docs/VALIDATION.md).
 
 ## Development
 
@@ -52,7 +53,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 open Eng.xcodeproj
 ```
 
-The generated Xcode project is intentionally ignored; `project.yml` is its source of truth. The debug-only `-eng-demo`, `-eng-analytics`, and `-eng-thread` launch arguments render deterministic project, analytics, and thread states for visual QA without altering release behavior.
+The generated Xcode project is intentionally ignored; `project.yml` is its source of truth. The debug-only `-eng-demo`, `-eng-analytics`, and `-eng-thread` launch arguments render deterministic project, analytics, and thread states for visual QA without altering release behavior. `-eng-pair-code CODE` automates pairing only in debug builds for repeatable simulator integration tests.
 
 On each bridge launch, enter the short pairing code shown in the Mac terminal. Reconnects to that running bridge are automatic. Analytics retains only the most recent 90 in-memory samples per device. Exact iPhone temperature is not available through Apple’s public API, so Eng reports `ProcessInfo.thermalState` categories instead of degrees.
 

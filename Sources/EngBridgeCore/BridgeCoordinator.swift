@@ -7,11 +7,15 @@ public actor BridgeCoordinator {
   private let service: CodexThreadService
   private let telemetry: MacTelemetrySampler
   private let bridgeName: String
+  private let statusHandler: @Sendable (String) -> Void
   private var pairingGate: PairingGate
   private var pairedPeers = Set<String>()
   private var peerDevices: [String: UUID] = [:]
   private var subscriptions: [String: String] = [:]
   private var phoneAnalytics: [String: AnalyticsSnapshot] = [:]
+  private var reportedPhoneTelemetryPeers = Set<String>()
+  private var reportedLinkTelemetryPeers = Set<String>()
+  private var reportedWorkspaceShape: String?
   private var lastWorkspace: WorkspaceSnapshot?
   private var lastMacTelemetry: DeviceTelemetry?
   private var refreshTask: Task<Void, Never>?
@@ -23,13 +27,15 @@ public actor BridgeCoordinator {
     service: CodexThreadService,
     telemetry: MacTelemetrySampler = MacTelemetrySampler(),
     pairingGate: PairingGate = PairingGate(),
-    bridgeName: String = Host.current().localizedName ?? "Mac"
+    bridgeName: String = Host.current().localizedName ?? "Mac",
+    statusHandler: @escaping @Sendable (String) -> Void = { _ in }
   ) {
     self.nearby = nearby
     self.service = service
     self.telemetry = telemetry
     self.pairingGate = pairingGate
     self.bridgeName = bridgeName
+    self.statusHandler = statusHandler
   }
 
   public var pairingCode: String { pairingGate.code }
@@ -98,7 +104,10 @@ public actor BridgeCoordinator {
       try? nearby.send(BridgeEnvelope(message: .pairResult(result)), to: peer)
       if result.accepted {
         pairedPeers.insert(peer)
+        statusHandler("Paired \(request.deviceName) over an encrypted nearby session.")
         await sendInitialState(to: peer)
+      } else {
+        statusHandler("Pairing rejected for \(request.deviceName): \(result.reason ?? "unknown")")
       }
     default:
       guard pairedPeers.contains(peer) else {
@@ -119,10 +128,7 @@ public actor BridgeCoordinator {
     do {
       switch envelope.message {
       case .refresh:
-        await refreshNow()
-        if let workspace = lastWorkspace {
-          try nearby.send(BridgeEnvelope(message: .workspaceSnapshot(workspace)), to: peer)
-        }
+        await refreshNow(forceBroadcast: true)
       case .subscribe(let subscription):
         subscriptions[peer] = subscription.threadID
         let detail = try await service.subscribe(threadID: subscription.threadID)
@@ -141,6 +147,23 @@ public actor BridgeCoordinator {
         await sendSubscribedDetail(to: peer)
       case .analytics(let snapshot):
         phoneAnalytics[peer] = snapshot
+        if let phone = snapshot.phone, reportedPhoneTelemetryPeers.insert(peer).inserted {
+          let cpu = phone.cpuUsagePercent.map { String(format: "%.1f%%", $0) } ?? "unavailable"
+          statusHandler(
+            "Phone diagnostics received from \(phone.name): CPU \(cpu), thermal \(phone.thermalLevel.rawValue), interface \(phone.interface.rawValue)."
+          )
+        }
+        if let latency = snapshot.link.roundTripMilliseconds,
+          let speed = snapshot.link.measuredBytesPerSecond,
+          reportedLinkTelemetryPeers.insert(peer).inserted
+        {
+          statusHandler(
+            String(
+              format: "Bridge link measured at %.1f ms round trip and %.2f MB/s payload goodput.",
+              latency,
+              speed / 1_000_000
+            ))
+        }
         await sendAnalytics(to: peer)
       case .ping(let ping):
         let receivedAt = Date()
@@ -151,14 +174,16 @@ public actor BridgeCoordinator {
           payloadBytes: ping.payloadBytes
         )
         try nearby.send(BridgeEnvelope(message: .pong(pong)), to: peer)
-      case .clientHello, .pair, .pairResult, .workspaceSnapshot, .threadDetail,
+      case .clientHello, .pair, .pairResult, .workspaceSnapshot, .workspacePage, .threadDetail,
         .timelineEvent, .pong, .error:
         break
       }
     } catch {
+      let message = error.localizedDescription
+      statusHandler("Bridge operation failed for \(peer): \(message)")
       sendError(
         code: "bridge_operation",
-        message: error.localizedDescription,
+        message: message,
         recoverable: true,
         relatedTo: envelope.id,
         to: peer
@@ -166,12 +191,27 @@ public actor BridgeCoordinator {
     }
   }
 
-  private func refreshNow() async {
+  private func refreshNow(forceBroadcast: Bool = false) async {
     do {
       let workspace = try await service.refreshWorkspace()
+      let changed = lastWorkspace?.projects != workspace.projects
       lastWorkspace = workspace
-      for peer in pairedPeers {
-        try? nearby.send(BridgeEnvelope(message: .workspaceSnapshot(workspace)), to: peer)
+      if changed || forceBroadcast {
+        if changed {
+          let projectCount = workspace.projects.count
+          let threadCount = workspace.projects.reduce(0) { $0 + $1.threads.count }
+          let pageCount = WorkspacePager.pages(for: workspace).count
+          let shape = "\(projectCount):\(threadCount):\(pageCount)"
+          if reportedWorkspaceShape != shape {
+            reportedWorkspaceShape = shape
+            statusHandler(
+              "Workspace refreshed: \(projectCount) projects and \(threadCount) threads across \(pageCount) safe frames."
+            )
+          }
+        }
+        for peer in pairedPeers {
+          try? sendWorkspace(workspace, to: peer)
+        }
       }
     } catch {
       for peer in pairedPeers {
@@ -194,11 +234,18 @@ public actor BridgeCoordinator {
   }
 
   private func sendInitialState(to peer: String) async {
-    if lastWorkspace == nil { await refreshNow() }
-    if let workspace = lastWorkspace {
-      try? nearby.send(BridgeEnvelope(message: .workspaceSnapshot(workspace)), to: peer)
+    if lastWorkspace == nil {
+      await refreshNow(forceBroadcast: true)
+    } else if let workspace = lastWorkspace {
+      try? sendWorkspace(workspace, to: peer)
     }
     await sendAnalytics(to: peer)
+  }
+
+  private func sendWorkspace(_ workspace: WorkspaceSnapshot, to peer: String) throws {
+    for page in WorkspacePager.pages(for: workspace) {
+      try nearby.send(BridgeEnvelope(message: .workspacePage(page)), to: peer)
+    }
   }
 
   private func sendAnalytics(to peer: String) async {
@@ -242,10 +289,22 @@ public actor BridgeCoordinator {
   }
 
   private func peer(_ peer: String, changed state: MCSessionState) {
+    switch state {
+    case .connected:
+      statusHandler("Nearby peer connected: \(peer). Waiting for pairing confirmation.")
+    case .notConnected:
+      statusHandler("Nearby peer disconnected: \(peer).")
+    case .connecting:
+      break
+    @unknown default:
+      break
+    }
     if state != .connected {
       pairedPeers.remove(peer)
       subscriptions.removeValue(forKey: peer)
       phoneAnalytics.removeValue(forKey: peer)
+      reportedPhoneTelemetryPeers.remove(peer)
+      reportedLinkTelemetryPeers.remove(peer)
     }
   }
 
