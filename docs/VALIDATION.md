@@ -32,7 +32,7 @@ Validated on August 27, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - The Analytics tab renders separate Phone and MacBook cards, recent charts, a connection-quality card, and sample timestamps.
 - Both samplers report CPU, memory, app resident memory, disk, battery/power, uptime, network interface, and byte rates from public APIs.
 - The nearby link measurement uses a 64 KB request/response payload to calculate round-trip latency and goodput rather than presenting an inferred Wi-Fi label as speed.
-- Simulator live transport produced phone diagnostics plus a measured link sample while the full 893-thread workspace was mirrored.
+- The installed Release app paired from the physical iPhone over the encrypted nearby session while the full 893-thread workspace was available. The bridge read back a real phone sample of 16.5% CPU, nominal thermal state, and Wi-Fi, then measured the 64 KB probe at 478.2 ms round trip and 0.27 MB/s payload goodput.
 - Phone temperature in degrees is intentionally unavailable: Apple's public iOS API exposes thermal-pressure categories. Eng displays nominal/fair/serious/critical and does not use private APIs or invent a degree value.
 - Projects, thread, Analytics, connection, empty, and error states were rendered and visually inspected at iPhone dimensions. Dynamic status text and controls are exposed to accessibility where the system surface supports it.
 
