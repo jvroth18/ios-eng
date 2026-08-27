@@ -1,0 +1,14 @@
+#!/bin/zsh
+set -euo pipefail
+
+eng_port="${IOS_ENG_CODEX_PORT:-47321}"
+eng_ready_url="http://127.0.0.1:${eng_port}/readyz"
+
+if ! /usr/bin/curl --silent --fail --max-time 1 "$eng_ready_url" >/dev/null; then
+  print -u2 "Eng Bridge is not running on port ${eng_port}."
+  print -u2 "Start it first with: swift run eng-bridge"
+  exit 1
+fi
+
+exec codex --remote "ws://127.0.0.1:${eng_port}" "$@"
+

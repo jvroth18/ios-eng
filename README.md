@@ -31,11 +31,19 @@ Requirements: Xcode 26+, Swift 6, XcodeGen 2.46+, and a current authenticated Co
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift run eng-bridge
 ```
+
+Keep the bridge running, then start a fully mirrored Codex CLI thread from another IDE terminal:
+
+```sh
+./Scripts/codex-eng -C /path/to/repository
+```
+
+`swift run eng-bridge --smoke` validates the installed Codex protocol, thread discovery, Git grouping, and Mac telemetry without advertising to a phone.
 
 The generated Xcode project is intentionally ignored. Once `project.yml` lands, regenerate it with `xcodegen generate` before opening it in Xcode.
 
 ## Privacy
 
 Eng is local-first. It does not contain an OpenAI API key, copy Codex authentication to the phone, or open a LAN HTTP/WebSocket port. Pairing and traffic use an encrypted nearby session. Diagnostic history is short-lived and remains on the two devices.
-
