@@ -1,11 +1,10 @@
 .DS_Store
 .build/
 .swiftpm/
-DerivedData/
+DerivedData*/
 build/
 *.xcodeproj/
 xcuserdata/
 *.xcuserstate
 .ios-eng/
 *.log
-

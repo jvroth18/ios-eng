@@ -76,4 +76,11 @@ struct BridgeProtocolTests {
     #expect(request.text == "  Continue from the phone. \n")
     #expect(request.normalizedText == "Continue from the phone.")
   }
+
+  @Test func linkProbeCarriesRealPayloadBytes() throws {
+    let ping = Ping(sequence: 1, payloadBytes: 65_536)
+    #expect(ping.payloadBytes == 65_536)
+    let data = try JSONEncoder().encode(BridgeEnvelope(message: .ping(ping)))
+    #expect(data.count > ping.payloadBytes)
+  }
 }

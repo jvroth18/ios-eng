@@ -1,0 +1,75 @@
+name: Eng
+
+options:
+  bundleIdPrefix: dev.jvroth
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "26.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: 585XAFGPDN
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  Eng:
+    type: application
+    platform: iOS
+    sources:
+      - path: EngApp
+        excludes:
+          - Info.plist
+      - path: Sources/EngCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.jvroth.eng
+        PRODUCT_NAME: Eng
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.1.0"
+        SUPPORTS_MACCATALYST: NO
+    info:
+      path: EngApp/Info.plist
+      properties:
+        CFBundleDisplayName: Eng
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        NSLocalNetworkUsageDescription: Eng connects privately to the Codex bridge running on your Mac.
+        NSBonjourServices:
+          - _ios-eng._tcp
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIRequiresFullScreen: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+
+  EngTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: EngAppTests
+    dependencies:
+      - target: Eng
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.jvroth.eng.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Eng:
+    build:
+      targets:
+        Eng: all
+        EngTests: [test]
+    test:
+      targets:
+        - EngTests
+      gatherCoverageData: true

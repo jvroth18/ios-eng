@@ -30,7 +30,7 @@ For a full live mirror, CLI sessions use the bridge's shared local App Server wo
 
 ## Transport and pairing
 
-The nearby transport uses `MCSession` with required encryption. A first connection must present the short pairing code displayed by the Mac bridge. Pairing never transmits Codex login material. Protocol frames are bounded and typed; unknown versions and malformed payloads are rejected.
+The nearby transport uses `MCSession` with required encryption. Each bridge process presents a short-lived pairing code on its first phone connection; reconnects to that running process reuse the validated device identity. Pairing never transmits Codex login material. Protocol frames are bounded and typed; unknown versions and malformed payloads are rejected.
 
 ## Analytics
 
@@ -42,7 +42,7 @@ Both devices sample only public, user-space signals:
 - battery state, charge, and low-power mode where available
 - uptime
 - active network interface and byte throughput
-- measured bridge round-trip latency and payload goodput
+- measured bridge round-trip latency and payload goodput using a real bounded 64 KB request/response probe
 - `ProcessInfo.thermalState`
 
 iOS does not expose an exact device temperature to a normal app. Eng therefore reports Apple's thermal pressure categories (`nominal`, `fair`, `serious`, `critical`) and never fabricates degrees. Mac temperature follows the same public-API boundary; privileged tools are intentionally excluded.
@@ -54,4 +54,3 @@ iOS does not expose an exact device temperature to a normal app. Eng therefore r
 - Approval and user-input cards retain their request IDs and become terminal after one response.
 - Unknown Codex events degrade to a compact activity entry rather than breaking the stream.
 - Analytics values carry timestamps and optionals; unavailable signals render as unavailable, not zero.
-

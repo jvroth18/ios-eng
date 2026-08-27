@@ -266,12 +266,14 @@ public struct UserInputResponse: Codable, Equatable, Sendable {
 public struct Ping: Codable, Equatable, Sendable {
   public let sequence: UInt64
   public let clientSentAt: Date
-  public let payloadBytes: Int
+  public let probe: Data
+
+  public var payloadBytes: Int { probe.count }
 
   public init(sequence: UInt64, clientSentAt: Date = Date(), payloadBytes: Int = 0) {
     self.sequence = sequence
     self.clientSentAt = clientSentAt
-    self.payloadBytes = payloadBytes
+    probe = Data(repeating: 0xA7, count: min(max(payloadBytes, 0), 65_536))
   }
 }
 
@@ -280,7 +282,9 @@ public struct Pong: Codable, Equatable, Sendable {
   public let clientSentAt: Date
   public let bridgeReceivedAt: Date
   public let bridgeSentAt: Date
-  public let payloadBytes: Int
+  public let probe: Data
+
+  public var payloadBytes: Int { probe.count }
 
   public init(
     sequence: UInt64,
@@ -293,7 +297,7 @@ public struct Pong: Codable, Equatable, Sendable {
     self.clientSentAt = clientSentAt
     self.bridgeReceivedAt = bridgeReceivedAt
     self.bridgeSentAt = bridgeSentAt
-    self.payloadBytes = payloadBytes
+    probe = Data(repeating: 0xA7, count: min(max(payloadBytes, 0), 65_536))
   }
 }
 

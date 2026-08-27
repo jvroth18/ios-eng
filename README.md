@@ -16,7 +16,7 @@ Ordinary CLI sessions can always be discovered from Codex's local thread store. 
 
 ## Status
 
-This repository is being delivered in validated, incremental commits:
+This repository was delivered in validated, incremental commits:
 
 1. Shared mirror and telemetry contract.
 2. Mac bridge, Codex integration, diagnostics, and CLI workflow.
@@ -42,7 +42,19 @@ Keep the bridge running, then start a fully mirrored Codex CLI thread from anoth
 
 `swift run eng-bridge --smoke` validates the installed Codex protocol, thread discovery, Git grouping, and Mac telemetry without advertising to a phone.
 
-The generated Xcode project is intentionally ignored. Once `project.yml` lands, regenerate it with `xcodegen generate` before opening it in Xcode.
+Generate and validate the native app with:
+
+```sh
+xcodegen generate
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcodebuild -project Eng.xcodeproj -scheme Eng \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+open Eng.xcodeproj
+```
+
+The generated Xcode project is intentionally ignored; `project.yml` is its source of truth. The debug-only `-eng-demo`, `-eng-analytics`, and `-eng-thread` launch arguments render deterministic project, analytics, and thread states for visual QA without altering release behavior.
+
+On each bridge launch, enter the short pairing code shown in the Mac terminal. Reconnects to that running bridge are automatic. Analytics retains only the most recent 90 in-memory samples per device. Exact iPhone temperature is not available through Apple’s public API, so Eng reports `ProcessInfo.thermalState` categories instead of degrees.
 
 ## Privacy
 
