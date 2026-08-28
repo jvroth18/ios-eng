@@ -125,6 +125,7 @@ struct BridgeProtocolTests {
       .refresh(RefreshRequest(threadID: "thread-1")),
       .subscribe(ThreadSubscription(threadID: "thread-1")),
       .sendMessage(SendMessageRequest(threadID: "thread-1", text: "Continue")),
+      .setThreadModel(SetThreadModelRequest(threadID: "thread-1", model: "gpt-5.6-terra")),
       .interrupt(InterruptRequest(threadID: "thread-1", turnID: "turn-1")),
       .approvalResponse(ApprovalResponse(requestID: "rpc-1", decision: .acceptForSession)),
       .userInputResponse(UserInputResponse(requestID: "rpc-2", answers: ["choice": "yes"])),

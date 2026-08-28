@@ -28,6 +28,8 @@ public actor CodexThreadService {
   private var subscribedThreadIDs = Set<String>()
   private var externallyOwnedThreadIDs = Set<String>()
   private var activeTurnIDs: [String: String] = [:]
+  private var threadModels: [String: String] = [:]
+  private var cachedModelCatalog: [CodexModelOption]?
   private var pendingRequests: [String: PendingServerRequest] = [:]
 
   public init(
@@ -173,13 +175,20 @@ public actor CodexThreadService {
     )
     summaries[threadID] = summary
 
+    let models = (try? await modelCatalog()) ?? []
+    let selectedModel =
+      externallyOwnedThreadIDs.contains(threadID)
+      ? nil : threadModels[threadID] ?? models.first(where: \.isDefault)?.id
+
     return ThreadDetail(
       thread: summary,
       timeline: PhoneTimelineWindow.project(timeline),
       pendingActions: pendingRequests.values
         .map(\.action)
         .filter { $0.threadID == threadID }
-        .sorted { $0.createdAt < $1.createdAt }
+        .sorted { $0.createdAt < $1.createdAt },
+      selectedModel: selectedModel,
+      availableModels: models
     )
   }
 
@@ -237,6 +246,24 @@ public actor CodexThreadService {
       method: "turn/interrupt",
       params: ["threadId": .string(threadID), "turnId": .string(turnID)]
     )
+  }
+
+  public func setModel(threadID: String, model: String) async throws -> ThreadDetail {
+    guard !externallyOwnedThreadIDs.contains(threadID) else {
+      throw AppServerFailure(
+        message: "This model is controlled by the Mac process that owns the thread")
+    }
+    let models = try await modelCatalog()
+    guard models.contains(where: { $0.id == model }) else {
+      throw AppServerFailure(message: "Model \(model) is not available for this Codex account")
+    }
+    try await resume(threadID: threadID)
+    _ = try await connection.request(
+      method: "thread/settings/update",
+      params: ["threadId": .string(threadID), "model": .string(model)]
+    )
+    threadModels[threadID] = model
+    return try await threadDetail(threadID: threadID)
   }
 
   public func recordServerRequest(
@@ -378,12 +405,39 @@ public actor CodexThreadService {
     subscribedThreadIDs.insert(threadID)
     loadedThreadIDs.insert(threadID)
     externallyOwnedThreadIDs.remove(threadID)
+    if let model = response["model"]?.stringValue { threadModels[threadID] = model }
     if let turns = response["thread"]?["turns"]?.arrayValue {
       let mapped = CodexTimelineMapper.mapTurns(turns, threadID: threadID)
       if let activeTurnID = mapped.activeTurnID {
         activeTurnIDs[threadID] = activeTurnID
       }
     }
+  }
+
+  private func modelCatalog() async throws -> [CodexModelOption] {
+    if let cachedModelCatalog { return cachedModelCatalog }
+    var cursor: String?
+    var models: [CodexModelOption] = []
+    repeat {
+      var params: [String: JSONValue] = ["limit": 100, "includeHidden": false]
+      if let cursor { params["cursor"] = .string(cursor) }
+      let response = try await connection.request(method: "model/list", params: .object(params))
+      models.append(
+        contentsOf: (response["data"]?.arrayValue ?? []).compactMap { value in
+          guard let model = value["model"]?.stringValue,
+            let displayName = value["displayName"]?.stringValue
+          else { return nil }
+          return CodexModelOption(
+            id: model,
+            displayName: displayName,
+            description: value["description"]?.stringValue ?? "",
+            isDefault: value["isDefault"]?.boolValue ?? false
+          )
+        })
+      cursor = response["nextCursor"]?.stringValue
+    } while cursor != nil
+    cachedModelCatalog = models
+    return models
   }
 
   private static func isActiveWriterFailure(_ error: any Error) -> Bool {

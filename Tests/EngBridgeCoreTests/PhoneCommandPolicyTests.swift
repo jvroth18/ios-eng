@@ -10,6 +10,8 @@ struct PhoneCommandPolicyTests {
       .refresh(RefreshRequest()),
       .subscribe(ThreadSubscription(threadID: "existing-thread")),
       .sendMessage(SendMessageRequest(threadID: "existing-thread", text: "Continue")),
+      .setThreadModel(
+        SetThreadModelRequest(threadID: "existing-thread", model: "gpt-5.6-terra")),
       .interrupt(InterruptRequest(threadID: "existing-thread", turnID: "active-turn")),
       .approvalResponse(ApprovalResponse(requestID: "approval", decision: .accept)),
       .userInputResponse(UserInputResponse(requestID: "input", answers: ["q": "answer"])),

@@ -253,6 +253,51 @@ struct LiveThreadServiceTests {
     #expect(!methods.contains("thread/delete"))
   }
 
+  @Test func modelCatalogIsAccountAwareCachedAndUpdatesTheExistingThread() async throws {
+    let client = MockAppServerClient()
+    await client.enqueue(method: "thread/loaded/list", response: ["data": []])
+    await client.enqueue(
+      method: "thread/list",
+      response: ["data": [Self.thread(status: "idle")], "nextCursor": nil]
+    )
+    await client.enqueue(
+      method: "thread/resume",
+      response: ["model": "gpt-5.6-sol", "thread": ["id": "thread-1", "turns": []]]
+    )
+    await client.enqueue(method: "thread/turns/list", response: ["data": []])
+    await client.enqueue(
+      method: "model/list",
+      response: [
+        "data": [
+          [
+            "model": "gpt-5.6-sol", "displayName": "GPT-5.6 Sol",
+            "description": "Frontier coding", "isDefault": true,
+          ],
+          [
+            "model": "gpt-5.6-terra", "displayName": "GPT-5.6 Terra",
+            "description": "Balanced coding", "isDefault": false,
+          ],
+        ],
+        "nextCursor": nil,
+      ]
+    )
+    await client.enqueue(method: "thread/settings/update", response: [:])
+    await client.enqueue(method: "thread/turns/list", response: ["data": []])
+    let service = CodexThreadService(connection: client, bridgeName: "Test Mac")
+
+    _ = try await service.refreshWorkspace()
+    let initial = try await service.subscribe(threadID: "thread-1")
+    #expect(initial.selectedModel == "gpt-5.6-sol")
+    #expect(initial.availableModels.map(\.id) == ["gpt-5.6-sol", "gpt-5.6-terra"])
+
+    let updated = try await service.setModel(threadID: "thread-1", model: "gpt-5.6-terra")
+    #expect(updated.selectedModel == "gpt-5.6-terra")
+    #expect(await client.requestedMethods.filter { $0 == "model/list" }.count == 1)
+    let update = await client.requestedRequests.first { $0.method == "thread/settings/update" }
+    #expect(update?.params["threadId"]?.stringValue == "thread-1")
+    #expect(update?.params["model"]?.stringValue == "gpt-5.6-terra")
+  }
+
   private static let activeTurn: JSONValue = [
     "id": "turn-1", "status": "inProgress",
     "items": [

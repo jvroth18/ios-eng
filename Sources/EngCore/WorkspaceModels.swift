@@ -228,18 +228,38 @@ public struct ThreadDetail: Codable, Equatable, Sendable {
   public let thread: ThreadSummary
   public let timeline: [TimelineItem]
   public let pendingActions: [PendingAction]
+  public let selectedModel: String?
+  public let availableModels: [CodexModelOption]
   public let refreshedAt: Date
 
   public init(
     thread: ThreadSummary,
     timeline: [TimelineItem],
     pendingActions: [PendingAction] = [],
+    selectedModel: String? = nil,
+    availableModels: [CodexModelOption] = [],
     refreshedAt: Date = Date()
   ) {
     self.thread = thread
     self.timeline = timeline
     self.pendingActions = pendingActions
+    self.selectedModel = selectedModel
+    self.availableModels = availableModels
     self.refreshedAt = refreshedAt
+  }
+}
+
+public struct CodexModelOption: Codable, Equatable, Sendable, Identifiable {
+  public let id: String
+  public let displayName: String
+  public let description: String
+  public let isDefault: Bool
+
+  public init(id: String, displayName: String, description: String, isDefault: Bool = false) {
+    self.id = id
+    self.displayName = displayName
+    self.description = description
+    self.isDefault = isDefault
   }
 }
 

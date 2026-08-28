@@ -1,7 +1,7 @@
 import Foundation
 
 public struct BridgeEnvelope: Codable, Equatable, Sendable, Identifiable {
-  public static let currentProtocolVersion = 4
+  public static let currentProtocolVersion = 5
 
   public let id: UUID
   public let sentAt: Date
@@ -26,6 +26,7 @@ public enum BridgeMessage: Equatable, Sendable {
   case threadDetail(ThreadDetail)
   case timelineEvent(TimelineItem)
   case sendMessage(SendMessageRequest)
+  case setThreadModel(SetThreadModelRequest)
   case interrupt(InterruptRequest)
   case approvalResponse(ApprovalResponse)
   case userInputResponse(UserInputResponse)
@@ -53,6 +54,7 @@ extension BridgeMessage: Codable {
     case threadDetail
     case timelineEvent
     case sendMessage
+    case setThreadModel
     case interrupt
     case approvalResponse
     case userInputResponse
@@ -87,6 +89,8 @@ extension BridgeMessage: Codable {
       self = .timelineEvent(try container.decode(TimelineItem.self, forKey: .payload))
     case .sendMessage:
       self = .sendMessage(try container.decode(SendMessageRequest.self, forKey: .payload))
+    case .setThreadModel:
+      self = .setThreadModel(try container.decode(SetThreadModelRequest.self, forKey: .payload))
     case .interrupt:
       self = .interrupt(try container.decode(InterruptRequest.self, forKey: .payload))
     case .approvalResponse:
@@ -139,6 +143,9 @@ extension BridgeMessage: Codable {
       try container.encode(payload, forKey: .payload)
     case .sendMessage(let payload):
       try container.encode(Kind.sendMessage, forKey: .kind)
+      try container.encode(payload, forKey: .payload)
+    case .setThreadModel(let payload):
+      try container.encode(Kind.setThreadModel, forKey: .kind)
       try container.encode(payload, forKey: .payload)
     case .interrupt(let payload):
       try container.encode(Kind.interrupt, forKey: .kind)
@@ -244,6 +251,16 @@ public struct SendMessageRequest: Codable, Equatable, Sendable {
 
   public var normalizedText: String {
     text.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+}
+
+public struct SetThreadModelRequest: Codable, Equatable, Sendable {
+  public let threadID: String
+  public let model: String
+
+  public init(threadID: String, model: String) {
+    self.threadID = threadID
+    self.model = model
   }
 }
 

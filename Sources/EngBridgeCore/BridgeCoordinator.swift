@@ -211,6 +211,9 @@ public actor BridgeCoordinator {
         _ = try await service.sendMessage(threadID: request.threadID, text: request.normalizedText)
         let detail = try await service.threadDetail(threadID: request.threadID)
         try transport.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
+      case .setThreadModel(let request):
+        let detail = try await service.setModel(threadID: request.threadID, model: request.model)
+        try transport.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
       case .interrupt(let request):
         try await service.interrupt(threadID: request.threadID, turnID: request.turnID)
       case .approvalResponse(let response):

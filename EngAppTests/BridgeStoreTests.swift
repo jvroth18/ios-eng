@@ -276,6 +276,41 @@ struct BridgeStoreTests {
       })
   }
 
+  @Test func modelSelectionIsOptimisticAndRevertsWhenTheBridgeRejectsIt() {
+    let (store, client) = Self.makeStore()
+    let models = [
+      CodexModelOption(
+        id: "gpt-5.6-sol", displayName: "GPT-5.6 Sol", description: "Frontier",
+        isDefault: true),
+      CodexModelOption(
+        id: "gpt-5.6-terra", displayName: "GPT-5.6 Terra", description: "Balanced",
+        isDefault: false),
+    ]
+    store.receive(
+      BridgeEnvelope(
+        message: .threadDetail(
+          ThreadDetail(
+            thread: Self.thread("t1"), timeline: [], selectedModel: "gpt-5.6-sol",
+            availableModels: models))))
+
+    store.setModel("gpt-5.6-terra", for: "t1")
+
+    #expect(store.threadDetail?.selectedModel == "gpt-5.6-terra")
+    #expect(store.isUpdatingModel)
+    #expect(
+      client.sent.contains {
+        guard case .setThreadModel(let request) = $0 else { return false }
+        return request.threadID == "t1" && request.model == "gpt-5.6-terra"
+      })
+
+    store.receive(
+      BridgeEnvelope(
+        message: .error(
+          BridgeError(code: "model", message: "Unavailable", recoverable: true))))
+    #expect(store.threadDetail?.selectedModel == "gpt-5.6-sol")
+    #expect(!store.isUpdatingModel)
+  }
+
   @Test func serverMessageReplacesItsOptimisticCopyWithoutDuplication() {
     let (store, _) = Self.makeStore()
     store.receive(

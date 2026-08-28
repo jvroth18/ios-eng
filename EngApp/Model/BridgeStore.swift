@@ -50,6 +50,7 @@ final class BridgeStore: ObservableObject {
   @Published private(set) var phoneHistory: [AnalyticsPoint] = []
   @Published private(set) var macHistory: [AnalyticsPoint] = []
   @Published private(set) var isSending = false
+  @Published private(set) var isUpdatingModel = false
   @Published private(set) var activitySummaries: [String: String] = [:]
   @Published private(set) var pinnedProjectIDs: Set<String>
   @Published private(set) var unreadThreadIDs: Set<String>
@@ -89,6 +90,7 @@ final class BridgeStore: ObservableObject {
   private var awaitingTrustedReconnect = false
   private var pendingWorkspacePages: [Int: WorkspacePage] = [:]
   private var optimisticMessages: [String: [TimelineItem]] = [:]
+  private var pendingModelUpdate: (threadID: String, previousModel: String?)?
 
   convenience init() {
     self.init(client: nil, arguments: ProcessInfo.processInfo.arguments)
@@ -316,6 +318,29 @@ final class BridgeStore: ObservableObject {
     send(.interrupt(InterruptRequest(threadID: threadID, turnID: turnID)))
   }
 
+  func setModel(_ model: String, for threadID: String) {
+    guard let detail = threadDetail, detail.thread.id == threadID,
+      detail.thread.controlLevel != .observe,
+      detail.availableModels.contains(where: { $0.id == model }),
+      detail.selectedModel != model
+    else { return }
+    isUpdatingModel = true
+    pendingModelUpdate = (threadID, detail.selectedModel)
+    threadDetail = ThreadDetail(
+      thread: detail.thread,
+      timeline: detail.timeline,
+      pendingActions: detail.pendingActions,
+      selectedModel: model,
+      availableModels: detail.availableModels,
+      refreshedAt: detail.refreshedAt
+    )
+    if !send(.setThreadModel(SetThreadModelRequest(threadID: threadID, model: model))) {
+      isUpdatingModel = false
+      pendingModelUpdate = nil
+      threadDetail = detail
+    }
+  }
+
   func answerApproval(requestID: String, decision: ApprovalDecision) {
     send(.approvalResponse(ApprovalResponse(requestID: requestID, decision: decision)))
   }
@@ -409,6 +434,10 @@ final class BridgeStore: ObservableObject {
       if visibleThreadID == detail.thread.id { markThreadRead(detail.thread.id) }
       rememberActivity(in: reconciled)
       isSending = false
+      if pendingModelUpdate?.threadID == detail.thread.id {
+        pendingModelUpdate = nil
+        isUpdatingModel = false
+      }
     case .timelineEvent(let item):
       mergeTimelineEvent(item)
     case .analytics(let snapshot):
@@ -418,11 +447,30 @@ final class BridgeStore: ObservableObject {
     case .pong(let pong):
       receive(pong)
     case .error(let error):
-      if let selectedThreadID { markLatestOptimisticMessageFailed(threadID: selectedThreadID) }
+      let wasUpdatingModel = isUpdatingModel
+      if wasUpdatingModel,
+        let pendingModelUpdate,
+        let detail = threadDetail,
+        detail.thread.id == pendingModelUpdate.threadID
+      {
+        threadDetail = ThreadDetail(
+          thread: detail.thread,
+          timeline: detail.timeline,
+          pendingActions: detail.pendingActions,
+          selectedModel: pendingModelUpdate.previousModel,
+          availableModels: detail.availableModels,
+          refreshedAt: detail.refreshedAt
+        )
+      }
+      if !wasUpdatingModel, let selectedThreadID {
+        markLatestOptimisticMessageFailed(threadID: selectedThreadID)
+      }
       isSending = false
+      isUpdatingModel = false
+      pendingModelUpdate = nil
       if error.code == "pairing_required" { isPaired = false }
       presentedError = error
-    case .clientHello, .pair, .refresh, .subscribe, .sendMessage, .interrupt,
+    case .clientHello, .pair, .refresh, .subscribe, .sendMessage, .setThreadModel, .interrupt,
       .approvalResponse, .userInputResponse, .ping:
       break
     }
@@ -506,6 +554,8 @@ final class BridgeStore: ObservableObject {
       thread: detail.thread,
       timeline: timeline,
       pendingActions: detail.pendingActions,
+      selectedModel: detail.selectedModel,
+      availableModels: detail.availableModels,
       refreshedAt: Date()
     )
     threadDetail = detail
@@ -534,6 +584,8 @@ final class BridgeStore: ObservableObject {
       thread: detail.thread,
       timeline: detail.timeline + [item],
       pendingActions: detail.pendingActions,
+      selectedModel: detail.selectedModel,
+      availableModels: detail.availableModels,
       refreshedAt: Date()
     )
   }
@@ -572,6 +624,8 @@ final class BridgeStore: ObservableObject {
       thread: detail.thread,
       timeline: detail.timeline + acknowledged,
       pendingActions: detail.pendingActions,
+      selectedModel: detail.selectedModel,
+      availableModels: detail.availableModels,
       refreshedAt: detail.refreshedAt
     )
   }
@@ -600,6 +654,8 @@ final class BridgeStore: ObservableObject {
       thread: detail.thread,
       timeline: timeline,
       pendingActions: detail.pendingActions,
+      selectedModel: detail.selectedModel,
+      availableModels: detail.availableModels,
       refreshedAt: Date()
     )
   }

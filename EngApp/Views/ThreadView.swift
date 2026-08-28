@@ -17,6 +17,7 @@ struct ThreadView: View {
       Win95Window(title: displayedThread.title, icon: "doc.text.fill", onClose: { dismiss() }) {
         VStack(spacing: 5) {
           toolbar
+          modelSelector
           if let activity {
             activityBar(activity)
           }
@@ -143,6 +144,76 @@ struct ThreadView: View {
     .accessibilityLabel(
       [activity.title, activity.detail].compactMap { $0 }.joined(separator: ": ")
     )
+  }
+
+  private var modelSelector: some View {
+    HStack(spacing: 7) {
+      Image(systemName: "brain.head.profile")
+        .font(.system(size: 12, weight: .semibold))
+      Text("Model")
+        .font(Win95Font.bold)
+
+      if displayedThread.controlLevel == .observe {
+        Text("Controlled by Mac owner")
+          .font(Win95Font.small)
+          .foregroundStyle(Win95.shadow)
+      } else if displayedDetail == nil {
+        Text("Loading models…")
+          .font(Win95Font.small)
+          .foregroundStyle(Win95.shadow)
+      } else if displayedDetail?.availableModels.isEmpty != false {
+        Text("Models unavailable")
+          .font(Win95Font.small)
+          .foregroundStyle(Win95.shadow)
+      } else {
+        Menu {
+          ForEach(displayedDetail?.availableModels ?? []) { model in
+            Button {
+              store.setModel(model.id, for: displayedThread.id)
+            } label: {
+              if model.id == displayedDetail?.selectedModel {
+                Label(model.displayName, systemImage: "checkmark")
+              } else {
+                Text(model.displayName)
+              }
+            }
+          }
+        } label: {
+          HStack(spacing: 6) {
+            Text(selectedModelName)
+              .font(Win95Font.body)
+              .lineLimit(1)
+            Image(systemName: "chevron.down")
+              .font(.system(size: 9, weight: .bold))
+          }
+          .foregroundStyle(Win95.text)
+          .padding(.horizontal, 7)
+          .frame(minHeight: 25)
+          .bevel(.raised)
+        }
+        .disabled(store.isUpdatingModel)
+
+        if store.isUpdatingModel {
+          Text("Saving…")
+            .font(Win95Font.small)
+        } else if displayedThread.activeTurnID != nil {
+          Text("Next turn")
+            .font(Win95Font.small)
+            .foregroundStyle(Win95.shadow)
+        }
+      }
+      Spacer(minLength: 0)
+    }
+    .foregroundStyle(Win95.text)
+    .padding(.horizontal, 7)
+    .frame(minHeight: 31)
+    .bevel(.status)
+  }
+
+  private var selectedModelName: String {
+    guard let detail = displayedDetail else { return "Default" }
+    return detail.availableModels.first { $0.id == detail.selectedModel }?.displayName
+      ?? detail.selectedModel ?? "Default"
   }
 
   private var timeline: some View {

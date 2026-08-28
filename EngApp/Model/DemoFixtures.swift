@@ -182,6 +182,18 @@ import Foundation
             PendingActionOption(id: "decline", label: "No"),
           ]
         )
+      ],
+      selectedModel: "gpt-5.6-sol",
+      availableModels: [
+        CodexModelOption(
+          id: "gpt-5.6-sol", displayName: "GPT-5.6 Sol",
+          description: "Complex professional work", isDefault: true),
+        CodexModelOption(
+          id: "gpt-5.6-terra", displayName: "GPT-5.6 Terra",
+          description: "Balanced intelligence and cost"),
+        CodexModelOption(
+          id: "gpt-5.6-luna", displayName: "GPT-5.6 Luna",
+          description: "Cost-sensitive workloads"),
       ]
     )
 
