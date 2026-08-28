@@ -111,3 +111,66 @@ public enum SecureTransportCodec {
     }
   }
 }
+
+public final class SecureTransportRegistry: @unchecked Sendable {
+  private let lock = NSLock()
+  private var credentials: [UUID: TransportBootstrap] = [:]
+
+  public init() {}
+
+  public func credential(for deviceID: UUID) -> TransportBootstrap? {
+    lock.withLock {
+      guard let credential = credentials[deviceID], credential.isValid() else {
+        credentials.removeValue(forKey: deviceID)
+        return nil
+      }
+      return credential
+    }
+  }
+
+  @discardableResult
+  public func issue(for deviceID: UUID) throws -> TransportBootstrap {
+    if let credential = credential(for: deviceID) { return credential }
+    let credential = try TransportBootstrap.generate(deviceID: deviceID)
+    lock.withLock { credentials[deviceID] = credential }
+    return credential
+  }
+
+  public func install(_ credential: TransportBootstrap) {
+    guard credential.isValid() else { return }
+    lock.withLock { credentials[credential.deviceID] = credential }
+  }
+}
+
+public struct NewlineFrameBuffer: Sendable {
+  private var buffered = Data()
+
+  public init() {}
+
+  public mutating func append(_ data: Data) throws -> [Data] {
+    buffered.append(data)
+    guard buffered.count <= SecureTransportCodec.maximumPacketBytes + 1 else {
+      throw SecureTransportError.frameTooLarge
+    }
+    var frames: [Data] = []
+    while let newline = buffered.firstIndex(of: 0x0A) {
+      let frame = Data(buffered[..<newline])
+      buffered.removeSubrange(...newline)
+      guard !frame.isEmpty else { continue }
+      guard frame.count <= SecureTransportCodec.maximumPacketBytes else {
+        throw SecureTransportError.frameTooLarge
+      }
+      frames.append(frame)
+    }
+    return frames
+  }
+
+  public static func encode(_ frame: Data) throws -> Data {
+    guard frame.count <= SecureTransportCodec.maximumPacketBytes else {
+      throw SecureTransportError.frameTooLarge
+    }
+    var encoded = frame
+    encoded.append(0x0A)
+    return encoded
+  }
+}

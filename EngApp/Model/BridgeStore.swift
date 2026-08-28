@@ -70,7 +70,7 @@ final class BridgeStore: ObservableObject {
       automaticPairingCode = nil
     }
     deviceID = Self.loadDeviceID()
-    client = NearbyClient(displayName: UIDevice.current.name)
+    client = AdaptiveBridgeClient(displayName: UIDevice.current.name)
     client.setEventHandler { [weak self] event in
       Task { @MainActor [weak self] in
         self?.handle(event)
@@ -232,6 +232,7 @@ final class BridgeStore: ObservableObject {
     case .transportBootstrap(let bootstrap):
       guard bootstrap.deviceID == deviceID, bootstrap.isValid() else { return }
       secureTransportBootstrap = bootstrap
+      client.install(bootstrap)
     case .workspaceSnapshot(let snapshot):
       workspace = snapshot
       pendingWorkspaceID = nil

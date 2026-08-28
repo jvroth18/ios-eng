@@ -20,4 +20,9 @@ protocol BridgeClientTransport: AnyObject, Sendable {
   func start()
   func stop()
   func send(_ envelope: BridgeEnvelope) throws
+  func install(_ bootstrap: TransportBootstrap)
+}
+
+extension BridgeClientTransport {
+  func install(_ bootstrap: TransportBootstrap) {}
 }

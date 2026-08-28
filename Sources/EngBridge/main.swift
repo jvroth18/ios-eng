@@ -42,10 +42,15 @@ enum EngBridgeMain {
         return
       }
 
-      let nearby = NearbyServer()
+      let registry = SecureTransportRegistry()
+      let transport = CompositeBridgeServer([
+        NearbyServer(),
+        WiFiServer(registry: registry),
+      ])
       let coordinator = BridgeCoordinator(
-        transport: nearby,
+        transport: transport,
         service: service,
+        transportRegistry: registry,
         statusHandler: { message in
           FileHandle.standardOutput.write(Data("\(message)\n".utf8))
         }

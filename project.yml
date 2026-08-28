@@ -43,6 +43,7 @@ targets:
         NSLocalNetworkUsageDescription: Eng connects privately to the Codex bridge running on your Mac.
         NSBonjourServices:
           - _ios-eng._tcp
+          - _ios-eng-fast._tcp
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UIRequiresFullScreen: false

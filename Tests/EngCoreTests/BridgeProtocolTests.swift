@@ -4,6 +4,13 @@ import Testing
 @testable import EngCore
 
 struct BridgeProtocolTests {
+  @Test func newlineFramesHandleFragmentedAndCoalescedPackets() throws {
+    var frames = NewlineFrameBuffer()
+    #expect(try frames.append(Data("one".utf8)) == [])
+    #expect(try frames.append(Data("\ntwo\nthree".utf8)) == [Data("one".utf8), Data("two".utf8)])
+    #expect(try frames.append(Data("\n".utf8)) == [Data("three".utf8)])
+  }
+
   @Test func secureTransportRoundTripsAndRejectsTampering() throws {
     let now = Date(timeIntervalSince1970: 1_787_000_000)
     let credential = try TransportBootstrap.generate(

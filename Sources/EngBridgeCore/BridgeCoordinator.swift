@@ -7,10 +7,10 @@ public actor BridgeCoordinator {
   private let telemetry: MacTelemetrySampler
   private let bridgeName: String
   private let statusHandler: @Sendable (String) -> Void
+  private let transportRegistry: SecureTransportRegistry
   private var pairingGate: PairingGate
   private var pairedPeers = Set<String>()
   private var peerDevices: [String: UUID] = [:]
-  private var transportCredentials: [UUID: TransportBootstrap] = [:]
   private var subscriptions: [String: String] = [:]
   private var phoneAnalytics: [String: AnalyticsSnapshot] = [:]
   private var reportedPhoneTelemetryPeers = Set<String>()
@@ -27,6 +27,7 @@ public actor BridgeCoordinator {
     service: CodexThreadService,
     telemetry: MacTelemetrySampler = MacTelemetrySampler(),
     pairingGate: PairingGate = PairingGate(),
+    transportRegistry: SecureTransportRegistry = SecureTransportRegistry(),
     bridgeName: String = Host.current().localizedName ?? "Mac",
     statusHandler: @escaping @Sendable (String) -> Void = { _ in }
   ) {
@@ -34,6 +35,7 @@ public actor BridgeCoordinator {
     self.service = service
     self.telemetry = telemetry
     self.pairingGate = pairingGate
+    self.transportRegistry = transportRegistry
     self.bridgeName = bridgeName
     self.statusHandler = statusHandler
   }
@@ -200,10 +202,7 @@ public actor BridgeCoordinator {
   }
 
   private func transportCredential(for deviceID: UUID) throws -> TransportBootstrap {
-    if let current = transportCredentials[deviceID], current.isValid() { return current }
-    let credential = try TransportBootstrap.generate(deviceID: deviceID)
-    transportCredentials[deviceID] = credential
-    return credential
+    try transportRegistry.issue(for: deviceID)
   }
 
   private func refreshNow(forceBroadcast: Bool = false) async {

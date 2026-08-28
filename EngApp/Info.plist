@@ -23,6 +23,7 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_ios-eng._tcp</string>
+		<string>_ios-eng-fast._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Eng connects privately to the Codex bridge running on your Mac.</string>
