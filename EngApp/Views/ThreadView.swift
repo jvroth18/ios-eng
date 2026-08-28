@@ -3,71 +3,35 @@ import SwiftUI
 
 struct ThreadView: View {
   @EnvironmentObject private var store: BridgeStore
+  @Environment(\.dismiss) private var dismiss
   let thread: ThreadSummary
 
   @State private var draft = ""
+  @State private var followsTail = true
   @FocusState private var composerFocused: Bool
 
   var body: some View {
     ZStack {
-      EngCanvas()
-      ScrollViewReader { proxy in
-        ScrollView {
-          LazyVStack(spacing: 14) {
-            ThreadContextCard(thread: displayedThread)
-
-            if let detail = displayedDetail {
-              ForEach(detail.pendingActions) { action in
-                PendingActionCard(action: action)
-              }
-
-              if detail.timeline.isEmpty {
-                emptyTimeline
-              } else {
-                ForEach(detail.timeline) { item in
-                  TimelineRow(item: item)
-                    .id(item.id)
-                }
-              }
-            } else {
-              ProgressView("Loading thread")
-                .tint(EngDesign.cyan)
-                .foregroundStyle(EngDesign.muted)
-                .padding(.vertical, 60)
-            }
-
-            Color.clear.frame(height: 1).id("thread-end")
-          }
-          .padding(.horizontal, 15)
-          .padding(.top, 8)
-          .padding(.bottom, 10)
+      Win95.desktop.ignoresSafeArea()
+      Win95Window(title: displayedThread.title, icon: "doc.text.fill", onClose: { dismiss() }) {
+        VStack(spacing: 5) {
+          toolbar
+          contextBox
+          timeline
+          composer
+          Win95StatusBar(items: [
+            "\(displayedThread.status.presentationLabel)",
+            displayedThread.controlLevel.presentationLabel,
+            displayedThread.source.uppercased(),
+          ])
         }
-        .scrollDismissesKeyboard(.interactively)
-        .onChange(of: displayedDetail?.timeline.count) { _, _ in
-          withAnimation(.easeOut(duration: 0.24)) {
-            proxy.scrollTo("thread-end", anchor: .bottom)
-          }
-        }
+        .padding(.horizontal, 2)
+        .padding(.bottom, 2)
       }
+      .padding(6)
     }
-    .navigationTitle(displayedThread.title)
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbarBackground(EngDesign.canvas.opacity(0.94), for: .navigationBar)
-    .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
-        if let turnID = displayedThread.activeTurnID,
-          displayedThread.controlLevel == .live
-        {
-          Button(role: .destructive) {
-            store.interrupt(threadID: displayedThread.id, turnID: turnID)
-          } label: {
-            Image(systemName: "stop.circle.fill")
-          }
-          .accessibilityLabel("Interrupt current turn")
-        }
-      }
-    }
-    .safeAreaInset(edge: .bottom) { composer }
+    .toolbar(.hidden, for: .navigationBar)
+    .navigationBarBackButtonHidden(true)
     .task(id: thread.id) { store.subscribe(to: thread) }
   }
 
@@ -78,113 +42,170 @@ struct ThreadView: View {
 
   private var displayedThread: ThreadSummary { displayedDetail?.thread ?? thread }
 
-  private var emptyTimeline: some View {
-    VStack(spacing: 12) {
-      Image(systemName: "text.bubble")
-        .font(.title)
-        .foregroundStyle(EngDesign.accent)
-      Text("This thread has no visible messages yet.")
-        .font(.subheadline)
-        .foregroundStyle(EngDesign.muted)
+  /// Changes whenever the visible tail of the conversation changes, including body
+  /// growth of a streaming item that keeps its id.
+  private var tailSignature: String {
+    let timeline = displayedDetail?.timeline ?? []
+    let pending = displayedDetail?.pendingActions.count ?? 0
+    return "\(timeline.count):\(timeline.last?.body.count ?? 0):\(pending)"
+  }
+
+  private var toolbar: some View {
+    HStack(spacing: 6) {
+      Button {
+        dismiss()
+      } label: {
+        Label("Back", systemImage: "arrowshape.left.fill")
+      }
+      .buttonStyle(Win95ButtonStyle(compact: true))
+
+      if let turnID = displayedThread.activeTurnID, displayedThread.controlLevel == .live {
+        Button {
+          store.interrupt(threadID: displayedThread.id, turnID: turnID)
+        } label: {
+          Label("Stop", systemImage: "stop.fill")
+        }
+        .buttonStyle(Win95ButtonStyle(compact: true))
+        .accessibilityLabel("Interrupt current turn")
+      }
+
+      Spacer(minLength: 4)
+
+      HStack(spacing: 6) {
+        Win95LED(
+          color: displayedThread.status.ledColor,
+          blinking: displayedThread.status.ledBlinks
+        )
+        Text(displayedThread.status.presentationLabel)
+          .font(Win95Font.small)
+          .foregroundStyle(Win95.text)
+      }
+      .padding(.horizontal, 6)
+      .padding(.vertical, 4)
+      .bevel(.status)
     }
-    .padding(.vertical, 48)
+  }
+
+  private var contextBox: some View {
+    Win95GroupBox(title: "Thread") {
+      VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 5) {
+          Image(systemName: displayedThread.controlLevel.presentationSymbol)
+            .font(.system(size: 10))
+          Text(controlHint)
+        }
+        .font(Win95Font.small)
+        .foregroundStyle(Win95.text)
+        Text(displayedThread.cwd)
+          .font(Win95Font.monoSmall)
+          .foregroundStyle(Win95.text)
+          .lineLimit(2)
+          .truncationMode(.head)
+        Text(
+          "Updated \(displayedThread.updatedAt.formatted(.relative(presentation: .named)))"
+        )
+        .font(Win95Font.small)
+        .foregroundStyle(Win95.shadow)
+      }
+    }
+  }
+
+  private var timeline: some View {
+    ScrollViewReader { proxy in
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 6) {
+          if let detail = displayedDetail {
+            ForEach(detail.pendingActions) { action in
+              PendingActionDialog(action: action)
+            }
+            if detail.timeline.isEmpty {
+              emptyTimeline
+            } else {
+              ForEach(detail.timeline) { item in
+                TimelineRow(item: item)
+                  .id(item.id)
+              }
+            }
+          } else {
+            HStack(spacing: 8) {
+              Image(systemName: "hourglass")
+              Text("Loading thread…")
+            }
+            .font(Win95Font.body)
+            .foregroundStyle(Win95.text)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
+          }
+          Color.clear.frame(height: 1).id("thread-end")
+        }
+        .padding(6)
+      }
+      .scrollIndicators(.hidden)
+      .scrollDismissesKeyboard(.interactively)
+      .onScrollGeometryChange(for: Bool.self) { geometry in
+        geometry.contentOffset.y + geometry.containerSize.height
+          >= geometry.contentSize.height - 48
+      } action: { _, nearTail in
+        followsTail = nearTail
+      }
+      .onChange(of: tailSignature) { _, _ in
+        // Only follow new content when the reader is already at the tail, so scrolling
+        // up to read history is not yanked back by a streaming turn.
+        guard followsTail else { return }
+        proxy.scrollTo("thread-end", anchor: .bottom)
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .sunkenPaper()
+  }
+
+  private var emptyTimeline: some View {
+    VStack(spacing: 8) {
+      Image(systemName: "text.bubble")
+        .font(.system(size: 26))
+        .foregroundStyle(Win95.shadow)
+      Text("This thread has no visible messages yet.")
+        .font(Win95Font.small)
+        .foregroundStyle(Win95.text)
+    }
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, 40)
   }
 
   private var composer: some View {
-    VStack(spacing: 7) {
-      HStack(alignment: .bottom, spacing: 10) {
-        TextField("Message Codex", text: $draft, axis: .vertical)
-          .lineLimit(1...5)
-          .focused($composerFocused)
-          .padding(.horizontal, 14)
-          .padding(.vertical, 11)
-          .background(Color.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 18))
+    HStack(alignment: .bottom, spacing: 6) {
+      TextField("Type a message to Codex", text: $draft, axis: .vertical)
+        .lineLimit(1...5)
+        .focused($composerFocused)
+        .win95Field()
 
-        Button {
-          let message = draft
-          draft = ""
-          composerFocused = false
-          store.sendMessage(message, to: displayedThread.id)
-        } label: {
-          ZStack {
-            Circle().fill(EngDesign.accent)
-            if store.isSending {
-              ProgressView().tint(.white)
-            } else {
-              Image(
-                systemName: displayedThread.activeTurnID == nil
-                  ? "arrow.up" : "arrow.trianglehead.turn.up.right.diamond.fill"
-              )
-              .font(.headline.weight(.bold))
-              .foregroundStyle(.white)
-            }
-          }
-          .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.plain)
-        .disabled(!canSend || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        .opacity(canSend ? 1 : 0.45)
+      Button(sendLabel) {
+        let message = draft
+        draft = ""
+        composerFocused = false
+        store.sendMessage(message, to: displayedThread.id)
       }
-
-      HStack(spacing: 5) {
-        Image(systemName: displayedThread.controlLevel.presentationSymbol)
-        Text(controlHint)
-        Spacer()
-      }
-      .font(.caption2)
-      .foregroundStyle(EngDesign.muted)
-      .padding(.horizontal, 3)
+      .buttonStyle(Win95ButtonStyle(isDefault: true))
+      .disabled(!canSend || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
-    .padding(.horizontal, 13)
-    .padding(.top, 10)
-    .padding(.bottom, 5)
-    .background(.ultraThinMaterial)
-    .overlay(alignment: .top) { Divider().overlay(EngDesign.border) }
   }
 
   private var canSend: Bool { displayedThread.controlLevel == .live && !store.isSending }
+
+  private var sendLabel: String {
+    if store.isSending { return "Sending…" }
+    return displayedThread.activeTurnID == nil ? "Send" : "Steer"
+  }
 
   private var controlHint: String {
     switch displayedThread.controlLevel {
     case .live:
       displayedThread.activeTurnID == nil
-        ? "Starts a new turn in this existing thread" : "Steers the active turn"
+        ? "Live — starts a new turn in this existing thread"
+        : "Live — steers the active turn"
     case .message: "Connecting this existing thread for live control"
-    case .observe: "Read-only mirror for this thread"
+    case .observe: "Read-only mirror of this thread"
     }
-  }
-}
-
-private struct ThreadContextCard: View {
-  let thread: ThreadSummary
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        HStack(spacing: 7) {
-          StatusDot(color: thread.status.presentationColor, pulsing: thread.status == .active)
-          Text(thread.status.presentationLabel)
-            .font(.caption.weight(.bold))
-        }
-        Spacer()
-        Label(
-          thread.controlLevel.presentationLabel, systemImage: thread.controlLevel.presentationSymbol
-        )
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(thread.controlLevel == .live ? EngDesign.cyan : EngDesign.muted)
-      }
-
-      Text(thread.cwd)
-        .font(.caption2.monospaced())
-        .foregroundStyle(EngDesign.muted)
-        .lineLimit(2)
-      Text(
-        "\(thread.source.uppercased()) · Updated \(thread.updatedAt.formatted(.relative(presentation: .named)))"
-      )
-      .font(.caption2.weight(.medium))
-      .foregroundStyle(EngDesign.muted)
-    }
-    .glassCard(padding: 15)
   }
 }
 
@@ -194,133 +215,134 @@ private struct TimelineRow: View {
   var body: some View {
     switch item.kind {
     case .user, .assistant:
-      MessageBubble(item: item)
+      MessageLine(item: item)
     case .reasoning, .plan, .command, .fileChange, .tool, .approval, .system, .error:
-      ActivityCard(item: item)
+      ActivityRow(item: item)
     }
   }
 }
 
-private struct MessageBubble: View {
+private struct MessageLine: View {
   let item: TimelineItem
 
-  var body: some View {
-    HStack {
-      if item.kind == .user { Spacer(minLength: 48) }
-      VStack(alignment: .leading, spacing: 7) {
-        HStack(spacing: 6) {
-          Text(item.kind == .user ? "You" : "Codex")
-            .font(.caption2.weight(.bold))
-          if item.state == .running {
-            ProgressView().controlSize(.mini).tint(.white)
-          }
-        }
-        .foregroundStyle(item.kind == .user ? Color.white.opacity(0.82) : EngDesign.cyan)
+  private var isUser: Bool { item.kind == .user }
 
-        Text(item.body.isEmpty ? "…" : item.body)
-          .font(.body)
-          .textSelection(.enabled)
-          .lineSpacing(3)
-      }
-      .padding(.horizontal, 15)
-      .padding(.vertical, 12)
-      .background {
-        if item.kind == .user {
-          RoundedRectangle(cornerRadius: 20, style: .continuous).fill(EngDesign.accent)
-        } else {
-          RoundedRectangle(cornerRadius: 20, style: .continuous).fill(EngDesign.raised)
+  var body: some View {
+    VStack(alignment: .leading, spacing: 3) {
+      HStack(spacing: 6) {
+        Text(isUser ? "You" : "Codex")
+          .font(Win95Font.bold)
+        Text(item.timestamp.formatted(date: .omitted, time: .shortened))
+          .font(Win95Font.small)
+          .opacity(0.7)
+        if item.state == .running {
+          Text("…")
+            .font(Win95Font.bold)
         }
       }
-      .overlay {
-        if item.kind == .assistant {
-          RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .stroke(EngDesign.border)
-        }
-      }
-      if item.kind == .assistant { Spacer(minLength: 30) }
+      Text(item.body.isEmpty ? "…" : item.body)
+        .font(Win95Font.body)
+        .textSelection(.enabled)
+        .fixedSize(horizontal: false, vertical: true)
     }
+    .foregroundStyle(isUser ? Win95.highlightText : Win95.text)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, 8)
+    .padding(.vertical, 6)
+    .background(isUser ? Win95.highlight : Color.clear)
   }
 }
 
-private struct ActivityCard: View {
+private struct ActivityRow: View {
   let item: TimelineItem
   @State private var expanded = false
 
   var body: some View {
-    DisclosureGroup(isExpanded: $expanded) {
-      if !item.body.isEmpty {
+    VStack(alignment: .leading, spacing: 4) {
+      Button {
+        expanded.toggle()
+      } label: {
+        HStack(spacing: 6) {
+          TreeExpander(expanded: expanded)
+          Image(systemName: symbol)
+            .font(.system(size: 12))
+            .foregroundStyle(item.kind == .error ? Win95.ledRed : Win95.text)
+            .frame(width: 16)
+          Text(item.title)
+            .font(Win95Font.body)
+            .lineLimit(1)
+          Spacer(minLength: 4)
+          if item.state == .running {
+            Win95LED(color: Win95.ledGreen, blinking: true)
+          }
+          Text(item.state.rawValue.capitalized)
+            .font(Win95Font.small)
+            .opacity(0.75)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(Win95RowStyle())
+
+      if expanded, !item.body.isEmpty {
         Text(item.body)
-          .font(.caption.monospaced())
-          .foregroundStyle(Color.white.opacity(0.72))
+          .font(Win95Font.mono)
+          .foregroundStyle(Win95.text)
           .textSelection(.enabled)
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.top, 10)
-      }
-    } label: {
-      HStack(spacing: 10) {
-        Image(systemName: symbol)
-          .foregroundStyle(color)
-          .frame(width: 22)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(item.title)
-            .font(.subheadline.weight(.semibold))
-            .lineLimit(1)
-          Text(item.state.rawValue.capitalized)
-            .font(.caption2)
-            .foregroundStyle(EngDesign.muted)
-        }
-        Spacer()
-        if item.state == .running { ProgressView().controlSize(.small).tint(color) }
+          .padding(6)
+          .bevel(.sunken)
+          .padding(.leading, 22)
+          .padding(.trailing, 6)
       }
     }
-    .tint(EngDesign.muted)
-    .padding(13)
-    .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 17))
-    .overlay { RoundedRectangle(cornerRadius: 17).stroke(EngDesign.border) }
   }
 
   private var symbol: String {
     switch item.kind {
-    case .reasoning: "brain.head.profile"
-    case .plan: "checklist"
-    case .command: "terminal.fill"
+    case .reasoning: "brain"
+    case .plan: "list.bullet.clipboard"
+    case .command: "terminal"
     case .fileChange: "doc.badge.gearshape"
-    case .tool: "wrench.and.screwdriver.fill"
-    case .approval: "hand.raised.fill"
-    case .error: "exclamationmark.triangle.fill"
-    default: "circle.dotted"
+    case .tool: "wrench.and.screwdriver"
+    case .approval: "hand.raised"
+    case .error: "xmark.octagon.fill"
+    default: "circle"
     }
-  }
-
-  private var color: Color {
-    item.kind == .error
-      ? EngDesign.coral : (item.state == .running ? EngDesign.cyan : EngDesign.muted)
   }
 }
 
-private struct PendingActionCard: View {
+private struct PendingActionDialog: View {
   @EnvironmentObject private var store: BridgeStore
   let action: PendingAction
   @State private var answers: [String: String] = [:]
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      HStack(spacing: 9) {
-        Image(
-          systemName: action.kind == .userInput ? "questionmark.bubble.fill" : "hand.raised.fill"
-        )
-        .foregroundStyle(EngDesign.amber)
-        Text(action.title)
-          .font(.headline)
-      }
-      Text(action.detail)
-        .font(.subheadline)
-        .foregroundStyle(Color.white.opacity(0.76))
-        .lineLimit(8)
-        .textSelection(.enabled)
+    Win95Window(title: dialogTitle, icon: "hand.raised.fill") {
+      VStack(alignment: .leading, spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
+          Image(
+            systemName: action.kind == .userInput
+              ? "questionmark.circle.fill" : "exclamationmark.triangle.fill"
+          )
+          .symbolRenderingMode(.palette)
+          .foregroundStyle(.black, Win95.warning)
+          .font(.system(size: 28))
+          VStack(alignment: .leading, spacing: 4) {
+            Text(action.title)
+              .font(Win95Font.bold)
+              .foregroundStyle(Win95.text)
+            Text(action.detail)
+              .font(Win95Font.body)
+              .foregroundStyle(Win95.text)
+              .lineLimit(8)
+              .textSelection(.enabled)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
 
-      if action.kind == .userInput, !action.questions.isEmpty {
-        VStack(spacing: 12) {
+        if action.kind == .userInput, !action.questions.isEmpty {
           ForEach(action.questions) { question in
             PendingQuestionView(
               question: question,
@@ -330,50 +352,50 @@ private struct PendingActionCard: View {
               )
             )
           }
-          Button {
-            store.answerUserInput(requestID: action.id, answers: answers)
-          } label: {
-            Text("Send answer")
-              .font(.subheadline.weight(.bold))
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, 12)
-              .background(EngDesign.accent, in: RoundedRectangle(cornerRadius: 13))
+          HStack {
+            Spacer()
+            Button("Send answer") {
+              store.answerUserInput(requestID: action.id, answers: answers)
+            }
+            .buttonStyle(Win95ButtonStyle(isDefault: true))
+            .disabled(!allQuestionsAnswered)
           }
-          .buttonStyle(.plain)
-          .disabled(!allQuestionsAnswered)
-          .opacity(allQuestionsAnswered ? 1 : 0.45)
-        }
-      } else if action.options.isEmpty {
-        Text("Answer this request from the Mac session.")
-          .font(.caption)
-          .foregroundStyle(EngDesign.muted)
-      } else {
-        VStack(spacing: 8) {
-          ForEach(action.options) { option in
-            Button {
-              answer(option)
-            } label: {
-              HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(option.label).font(.subheadline.weight(.semibold))
+        } else if action.options.isEmpty {
+          Text("Answer this request from the Mac session.")
+            .font(Win95Font.small)
+            .foregroundStyle(Win95.text)
+        } else {
+          VStack(spacing: 6) {
+            ForEach(action.options) { option in
+              Button {
+                answer(option)
+              } label: {
+                VStack(spacing: 1) {
+                  Text(option.label)
                   if let detail = option.detail {
-                    Text(detail).font(.caption).foregroundStyle(EngDesign.muted)
+                    Text(detail).font(Win95Font.small)
                   }
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
+                .frame(maxWidth: .infinity)
               }
-              .padding(12)
-              .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 13))
+              .buttonStyle(
+                Win95ButtonStyle(isDefault: option.id == ApprovalDecision.accept.rawValue))
             }
-            .buttonStyle(.plain)
           }
         }
       }
+      .padding(8)
     }
-    .padding(16)
-    .background(EngDesign.amber.opacity(0.10), in: RoundedRectangle(cornerRadius: 22))
-    .overlay { RoundedRectangle(cornerRadius: 22).stroke(EngDesign.amber.opacity(0.32)) }
+    .padding(.vertical, 4)
+  }
+
+  private var dialogTitle: String {
+    switch action.kind {
+    case .commandApproval: "Command approval"
+    case .fileApproval: "File approval"
+    case .permissions: "Permission request"
+    case .userInput: "Codex needs input"
+    }
   }
 
   private func answer(_ option: PendingActionOption) {
@@ -395,37 +417,36 @@ private struct PendingQuestionView: View {
   @Binding var answer: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text(question.prompt)
-        .font(.subheadline.weight(.semibold))
+    Win95GroupBox(title: question.prompt) {
       if question.options.isEmpty {
         TextField("Your answer", text: $answer, axis: .vertical)
           .lineLimit(1...4)
-          .padding(11)
-          .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 12))
+          .win95Field()
       } else {
-        ForEach(question.options) { option in
-          Button {
-            answer = option.label
-          } label: {
-            HStack {
-              Image(systemName: answer == option.label ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(answer == option.label ? EngDesign.cyan : EngDesign.muted)
-              VStack(alignment: .leading, spacing: 2) {
-                Text(option.label).font(.subheadline.weight(.semibold))
-                if let detail = option.detail {
-                  Text(detail).font(.caption).foregroundStyle(EngDesign.muted)
+        VStack(alignment: .leading, spacing: 6) {
+          ForEach(question.options) { option in
+            Button {
+              answer = option.label
+            } label: {
+              HStack(alignment: .top, spacing: 6) {
+                Image(systemName: answer == option.label ? "smallcircle.filled.circle" : "circle")
+                  .font(.system(size: 12))
+                  .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 1) {
+                  Text(option.label).font(Win95Font.body)
+                  if let detail = option.detail {
+                    Text(detail).font(Win95Font.small).opacity(0.75)
+                  }
                 }
+                Spacer()
               }
-              Spacer()
+              .foregroundStyle(Win95.text)
+              .contentShape(Rectangle())
             }
-            .padding(11)
-            .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+            .buttonStyle(.plain)
           }
-          .buttonStyle(.plain)
         }
       }
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }

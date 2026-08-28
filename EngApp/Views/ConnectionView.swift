@@ -6,107 +6,147 @@ struct ConnectionView: View {
   @FocusState private var codeFocused: Bool
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 28) {
-        HStack {
-          EngMark(size: 46)
-          Spacer()
-          ConnectionPill()
+    GeometryReader { geometry in
+      ScrollView {
+        VStack {
+          Spacer(minLength: 0)
+          setupWindow
+            .frame(maxWidth: 440)
+          Spacer(minLength: 0)
         }
-
-        Spacer(minLength: 36)
-
-        VStack(alignment: .leading, spacing: 12) {
-          Text("YOUR CODEX WORK,\nIN YOUR POCKET")
-            .font(.caption.weight(.heavy))
-            .tracking(2.5)
-            .foregroundStyle(EngDesign.cyan)
-          Text("Stay close to the work.")
-            .font(.system(size: 42, weight: .bold, design: .rounded))
-            .tracking(-1.4)
-          Text(
-            "Eng mirrors active Mac projects, lets you guide live threads, and keeps both devices in view."
-          )
-          .font(.body)
-          .foregroundStyle(EngDesign.muted)
-          .lineSpacing(4)
-        }
-
-        VStack(alignment: .leading, spacing: 16) {
-          HStack(spacing: 12) {
-            Image(
-              systemName: store.isConnected ? "macbook.and.iphone" : "dot.radiowaves.left.and.right"
-            )
-            .font(.title2)
-            .foregroundStyle(EngDesign.accent)
-            .frame(width: 44, height: 44)
-            .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
-            VStack(alignment: .leading, spacing: 3) {
-              Text(store.isConnected ? "Mac found" : "Searching nearby")
-                .font(.headline)
-              Text(connectionDetail)
-                .font(.caption)
-                .foregroundStyle(EngDesign.muted)
-            }
-          }
-
-          if store.isConnected {
-            VStack(alignment: .leading, spacing: 10) {
-              Text("PAIRING CODE")
-                .font(.caption2.weight(.bold))
-                .tracking(1.6)
-                .foregroundStyle(EngDesign.muted)
-              TextField("000000", text: $store.pairingCode)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .font(.system(size: 28, weight: .semibold, design: .monospaced))
-                .tracking(7)
-                .multilineTextAlignment(.center)
-                .padding(.vertical, 15)
-                .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 16))
-                .focused($codeFocused)
-                .onChange(of: store.pairingCode) { _, newValue in
-                  store.pairingCode = String(newValue.filter(\.isNumber).prefix(6))
-                }
-
-              Button {
-                store.pair()
-              } label: {
-                Text("Connect privately")
-                  .font(.headline)
-                  .frame(maxWidth: .infinity)
-                  .padding(.vertical, 15)
-                  .background(EngDesign.accent, in: RoundedRectangle(cornerRadius: 16))
-              }
-              .buttonStyle(.plain)
-              .disabled(store.pairingCode.count != 6)
-              .opacity(store.pairingCode.count == 6 ? 1 : 0.5)
-            }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-          }
-        }
-        .glassCard()
-
-        HStack(alignment: .top, spacing: 10) {
-          Image(systemName: "lock.shield.fill")
-            .foregroundStyle(EngDesign.mint)
-          Text(
-            "Nearby Auto uses encrypted Bluetooth or Wi-Fi without exposing Codex credentials. The App Server stays on Mac loopback."
-          )
-          .font(.caption)
-          .foregroundStyle(EngDesign.muted)
-          .lineSpacing(3)
-        }
+        .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+        .padding(10)
       }
-      .padding(.horizontal, 22)
-      .padding(.vertical, 18)
-      .frame(maxWidth: 620)
-      .frame(maxWidth: .infinity)
+      .scrollDismissesKeyboard(.interactively)
     }
-    .scrollDismissesKeyboard(.interactively)
-    .animation(.snappy, value: store.isConnected)
     .onChange(of: store.isConnected) { _, connected in
       if connected { codeFocused = true }
+    }
+  }
+
+  private var setupWindow: some View {
+    Win95Window(title: "Eng Setup", icon: "macbook.and.iphone") {
+      VStack(spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
+          wizardSidebar
+          VStack(alignment: .leading, spacing: 12) {
+            Text("Welcome to Eng")
+              .font(Win95Font.heading)
+              .foregroundStyle(Win95.text)
+            Text(
+              "This wizard connects your iPhone to the Codex bridge running on your Mac. "
+                + "Eng mirrors active projects, lets you guide live threads, and keeps both "
+                + "devices in view."
+            )
+            .font(Win95Font.body)
+            .foregroundStyle(Win95.text)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Win95GroupBox(title: "Bridge") {
+              VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                  Win95LED(color: statusLEDColor, blinking: !store.isConnected)
+                  Text(store.isConnected ? "Mac found" : "Searching nearby…")
+                    .font(Win95Font.bold)
+                    .foregroundStyle(Win95.text)
+                }
+                Text(connectionDetail)
+                  .font(Win95Font.small)
+                  .foregroundStyle(Win95.text)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+            }
+
+            if store.isConnected {
+              Win95GroupBox(title: "Pairing code") {
+                VStack(alignment: .leading, spacing: 6) {
+                  TextField("000000", text: $store.pairingCode)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .font(Win95Font.readout)
+                    .multilineTextAlignment(.center)
+                    .focused($codeFocused)
+                    .onChange(of: store.pairingCode) { _, newValue in
+                      store.pairingCode = String(newValue.filter(\.isNumber).prefix(6))
+                    }
+                    .win95Field()
+                  Text("Type the six digits printed by Eng Bridge in the Mac terminal.")
+                    .font(Win95Font.small)
+                    .foregroundStyle(Win95.text)
+                }
+              }
+            }
+          }
+          .padding(.leading, 12)
+          .padding(.trailing, 6)
+          .padding(.vertical, 6)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+
+        Rectangle().fill(Win95.shadow).frame(height: 1)
+        Rectangle().fill(Win95.light).frame(height: 1)
+
+        HStack(spacing: 6) {
+          Image(systemName: "lock.fill")
+            .font(.system(size: 11))
+            .foregroundStyle(Win95.text)
+          Text("Encrypted nearby session. Codex stays on the Mac.")
+            .font(Win95Font.small)
+            .foregroundStyle(Win95.text)
+            .lineLimit(2)
+          Spacer(minLength: 8)
+          Button("Connect >") {
+            store.pair()
+          }
+          .buttonStyle(Win95ButtonStyle(isDefault: true))
+          .disabled(!store.isConnected || store.pairingCode.count != 6)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 8)
+
+        Win95StatusBar(items: [store.connectionLabel, "Nearby Auto"])
+          .padding(.horizontal, 2)
+          .padding(.bottom, 2)
+      }
+    }
+  }
+
+  private var wizardSidebar: some View {
+    VStack(alignment: .leading) {
+      Image(systemName: "chevron.right.2")
+        .font(.system(size: 26, weight: .black))
+        .foregroundStyle(.white)
+      Text("Eng")
+        .font(.system(size: 26, weight: .bold))
+        .foregroundStyle(.white)
+      Text("for iPhone")
+        .font(Win95Font.small)
+        .foregroundStyle(Win95.lightFace)
+      Spacer(minLength: 40)
+      Text("v0.1")
+        .font(Win95Font.monoSmall)
+        .foregroundStyle(Win95.lightFace)
+    }
+    .padding(10)
+    .frame(width: 92)
+    .frame(maxHeight: .infinity)
+    .background(
+      LinearGradient(
+        colors: [Win95.titleStart, Win95.titleEnd],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+    )
+    .padding(.leading, 2)
+    .padding(.top, 2)
+  }
+
+  private var statusLEDColor: Color {
+    switch store.connection {
+    case .connected: Win95.ledGreen
+    case .connecting, .searching: Win95.ledYellow
+    case .disconnected: Win95.ledYellow
+    case .failed: Win95.ledRed
     }
   }
 
@@ -118,21 +158,5 @@ struct ConnectionView: View {
     case .disconnected: "The bridge dropped. Eng will reconnect automatically."
     case .failed(let reason): reason
     }
-  }
-}
-
-struct EngMark: View {
-  let size: CGFloat
-
-  var body: some View {
-    ZStack {
-      RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-        .fill(EngDesign.accent)
-      Image(systemName: "chevron.right.2")
-        .font(.system(size: size * 0.34, weight: .black, design: .rounded))
-        .foregroundStyle(.white)
-    }
-    .frame(width: size, height: size)
-    .shadow(color: EngDesign.violet.opacity(0.35), radius: 18, y: 8)
   }
 }

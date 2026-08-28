@@ -9,7 +9,7 @@ struct EngApp: App {
     WindowGroup {
       RootView()
         .environmentObject(store)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(.light)
         .task { store.start() }
     }
   }

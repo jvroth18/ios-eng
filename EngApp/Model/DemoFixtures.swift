@@ -75,9 +75,39 @@ import Foundation
           ],
           updatedAt: now.addingTimeInterval(-840)
         ),
+        ProjectSummary(
+          id: "talky",
+          name: "talky-web",
+          repositoryRoot: "/Users/jordanrothstein/Desktop/GitHub/talky-web",
+          gitOrigin: "git@github.com:jvroth18/talky-web.git",
+          threads: talkyThreads,
+          updatedAt: now.addingTimeInterval(-3_600)
+        ),
       ],
       generatedAt: now
     )
+
+    private static let talkyTitles = [
+      "Fix voicemail transcript layout", "Add booking reminders", "Tune agent greeting",
+      "Refactor call router", "Write onboarding copy", "Migrate billing webhook",
+      "Add dark mode", "Speed up dashboard", "Audit accessibility",
+    ]
+
+    private static let talkyThreads: [ThreadSummary] = talkyTitles.enumerated().map {
+      index, title in
+      let position = index + 1
+      return ThreadSummary(
+        id: "demo-talky-\(position)",
+        title: title,
+        preview: "Saved CLI session.",
+        cwd: "/Users/jordanrothstein/Desktop/GitHub/talky-web",
+        repositoryRoot: "/Users/jordanrothstein/Desktop/GitHub/talky-web",
+        source: "cli",
+        status: position == 1 ? .idle : .notLoaded,
+        controlLevel: position == 1 ? .live : .observe,
+        updatedAt: now.addingTimeInterval(-Double(position) * 3_600)
+      )
+    }
 
     static let threadDetail = ThreadDetail(
       thread: liveThread,
@@ -125,6 +155,22 @@ import Foundation
             "The native app is compiling cleanly. I’m checking the analytics layout on a real device now…",
           timestamp: now.addingTimeInterval(-8)
         ),
+      ],
+      pendingActions: [
+        PendingAction(
+          id: "demo-approval",
+          threadID: liveThread.id,
+          kind: .commandApproval,
+          title: "Run xcodebuild test?",
+          detail:
+            "xcodebuild -scheme Eng -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test",
+          options: [
+            PendingActionOption(id: "accept", label: "Yes", detail: "Run this once"),
+            PendingActionOption(
+              id: "acceptForSession", label: "Yes to all", detail: "For this session"),
+            PendingActionOption(id: "decline", label: "No"),
+          ]
+        )
       ]
     )
 

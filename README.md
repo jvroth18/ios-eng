@@ -6,7 +6,7 @@ The repository contains three pieces:
 
 - `EngCore`: the versioned, tested wire protocol and shared models.
 - `EngBridge`: a Mac companion that connects to Codex App Server and advertises encrypted nearby and direct Wi-Fi sessions.
-- `Eng`: a deliberately small SwiftUI iPhone app with Projects, Thread, and Analytics surfaces.
+- `Eng`: a deliberately small SwiftUI iPhone app with Projects, Thread, and Analytics surfaces, drawn in a classic Windows 9x "analog" style (beveled windows, tab pages, LEDs, and a green-phosphor system monitor) from the `EngApp/Design/Win95.swift` kit.
 
 ## Product boundary
 

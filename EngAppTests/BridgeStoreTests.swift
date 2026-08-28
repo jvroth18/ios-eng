@@ -153,6 +153,29 @@ struct BridgeStoreTests {
     #expect(link.quality != .unavailable)
   }
 
+  @Test func silentReconnectProbeRejectionDoesNotRaiseAnError() {
+    let (store, client) = Self.makeStore()
+    store.handleForTesting(.state(.connected("Mac")))
+    #expect(
+      client.sent.contains {
+        if case .pair(let request) = $0 { request.code.isEmpty } else { false }
+      })
+    store.receive(
+      BridgeEnvelope(
+        message: .pairResult(
+          PairResult(accepted: false, bridgeName: "Mac", reason: "Pairing code is incorrect"))))
+    #expect(store.presentedError == nil)
+    #expect(!store.isPaired)
+
+    store.pairingCode = "123456"
+    store.pair()
+    store.receive(
+      BridgeEnvelope(
+        message: .pairResult(
+          PairResult(accepted: false, bridgeName: "Mac", reason: "Pairing code is incorrect"))))
+    #expect(store.presentedError?.message == "Pairing code is incorrect")
+  }
+
   @Test func pairingRequiredErrorDropsPairedState() {
     let (store, _) = Self.makeStore()
     Self.pair(store)

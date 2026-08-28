@@ -59,6 +59,9 @@ final class BridgeStore: ObservableObject {
   private var secureTransportBootstrap: TransportBootstrap?
   private var selectedThreadID: String?
   private var pendingWorkspaceID: UUID?
+  /// True while an automatic empty-code pair probe is outstanding; a rejection of that
+  /// probe is expected on first pairing and must not surface as an error.
+  private var awaitingTrustedReconnect = false
   private var pendingWorkspacePages: [Int: WorkspacePage] = [:]
 
   convenience init() {
@@ -191,6 +194,10 @@ final class BridgeStore: ObservableObject {
     presentedError = nil
   }
 
+  func handleForTesting(_ event: BridgeClientEvent) {
+    handle(event)
+  }
+
   private func handle(_ event: BridgeClientEvent) {
     switch event {
     case .state(let state):
@@ -227,6 +234,8 @@ final class BridgeStore: ObservableObject {
     case .pairResult(let result):
       bridgeName = result.bridgeName
       isPaired = result.accepted
+      let wasSilentProbe = awaitingTrustedReconnect
+      awaitingTrustedReconnect = false
       if result.accepted {
         pairingCode = ""
         presentedError = nil
@@ -235,6 +244,9 @@ final class BridgeStore: ObservableObject {
         if let selectedThreadID {
           send(.subscribe(ThreadSubscription(threadID: selectedThreadID)))
         }
+      } else if wasSilentProbe {
+        // Expected on first connect: the device is not yet trusted by this bridge.
+        break
       } else if let reason = result.reason {
         presentedError = BridgeError(
           code: "pairing_required",
@@ -401,6 +413,7 @@ final class BridgeStore: ObservableObject {
   }
 
   private func attemptTrustedReconnect() {
+    awaitingTrustedReconnect = true
     send(
       .pair(
         PairRequest(code: "", deviceID: deviceID, deviceName: UIDevice.current.name)))
