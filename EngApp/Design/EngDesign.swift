@@ -132,7 +132,13 @@ extension ThreadRuntimeStatus {
 }
 
 extension ThreadControlLevel {
-  var presentationLabel: String { rawValue.capitalized }
+  var presentationLabel: String {
+    switch self {
+    case .observe: "Read only"
+    case .message: "Available"
+    case .live: "Live"
+    }
+  }
 
   var presentationSymbol: String {
     switch self {

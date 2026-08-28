@@ -86,6 +86,53 @@ struct LiveThreadServiceTests {
     )
   }
 
+  @Test func messageSteersActiveExistingTurnWithoutCreatingThread() async throws {
+    let client = MockAppServerClient()
+    await client.enqueue(method: "thread/loaded/list", response: ["data": []])
+    await client.enqueue(
+      method: "thread/list",
+      response: ["data": [Self.thread(status: "active")], "nextCursor": nil]
+    )
+    await client.enqueue(
+      method: "thread/resume",
+      response: ["thread": ["id": "thread-1", "turns": [Self.activeTurn]]]
+    )
+    await client.enqueue(method: "thread/turns/list", response: ["data": [Self.activeTurn]])
+    await client.enqueue(method: "thread/turns/list", response: ["data": [Self.activeTurn]])
+    await client.enqueue(method: "turn/steer", response: ["turnId": "turn-1"])
+    let service = CodexThreadService(connection: client, bridgeName: "Test Mac")
+
+    _ = try await service.refreshWorkspace()
+    _ = try await service.subscribe(threadID: "thread-1")
+    #expect(try await service.sendMessage(threadID: "thread-1", text: "Steer") == "turn-1")
+    let methods = await client.requestedMethods
+    #expect(methods.contains("turn/steer"))
+    #expect(!methods.contains("turn/start"))
+    #expect(!methods.contains("thread/start"))
+  }
+
+  @Test func messageStartsTurnInsideIdleExistingThreadWithoutCreatingThread() async throws {
+    let client = MockAppServerClient()
+    await client.enqueue(method: "thread/loaded/list", response: ["data": []])
+    await client.enqueue(
+      method: "thread/list",
+      response: ["data": [Self.thread(status: "idle")], "nextCursor": nil]
+    )
+    await client.enqueue(method: "thread/resume", response: ["thread": ["turns": []]])
+    await client.enqueue(method: "thread/turns/list", response: ["data": []])
+    await client.enqueue(method: "thread/turns/list", response: ["data": []])
+    await client.enqueue(method: "turn/start", response: ["turn": ["id": "turn-new"]])
+    let service = CodexThreadService(connection: client, bridgeName: "Test Mac")
+
+    _ = try await service.refreshWorkspace()
+    _ = try await service.subscribe(threadID: "thread-1")
+    #expect(try await service.sendMessage(threadID: "thread-1", text: "Continue") == "turn-new")
+    let methods = await client.requestedMethods
+    #expect(methods.contains("turn/start"))
+    #expect(!methods.contains("thread/start"))
+    #expect(!methods.contains("thread/delete"))
+  }
+
   private static let activeTurn: JSONValue = [
     "id": "turn-1", "status": "inProgress", "items": [],
   ]

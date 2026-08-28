@@ -39,6 +39,7 @@ public actor CodexThreadService {
 
   public func refreshWorkspace(limit: Int? = nil) async throws -> WorkspaceSnapshot {
     try await refreshLoadedThreads()
+    await subscribeLoadedThreads()
     var cursor: String?
     var collected: [JSONValue] = []
 
@@ -107,6 +108,7 @@ public actor CodexThreadService {
     activeTurnIDs.removeAll()
     pendingRequests.removeAll()
     try await refreshLoadedThreads()
+    await subscribeLoadedThreads()
     for threadID in desiredThreadIDs { try await resume(threadID: threadID) }
   }
 
@@ -159,18 +161,17 @@ public actor CodexThreadService {
     let detail = try await threadDetail(threadID: threadID)
 
     if let activeTurnID = detail.thread.activeTurnID {
-      if controlLevel(for: threadID) == .live {
-        _ = try await connection.request(
-          method: "turn/steer",
-          params: [
-            "threadId": .string(threadID),
-            "expectedTurnId": .string(activeTurnID),
-            "input": [["type": "text", "text": .string(normalized)]],
-          ]
-        )
-        return activeTurnID
+      guard controlLevel(for: threadID) == .live else {
+        throw AppServerFailure(message: "Resume this existing thread before steering it")
       }
-      try queueMessage(threadID: threadID, text: normalized)
+      _ = try await connection.request(
+        method: "turn/steer",
+        params: [
+          "threadId": .string(threadID),
+          "expectedTurnId": .string(activeTurnID),
+          "input": [["type": "text", "text": .string(normalized)]],
+        ]
+      )
       return activeTurnID
     }
 
@@ -311,6 +312,12 @@ public actor CodexThreadService {
     loadedThreadIDs = loaded
   }
 
+  private func subscribeLoadedThreads() async {
+    for threadID in loadedThreadIDs where !subscribedThreadIDs.contains(threadID) {
+      try? await resume(threadID: threadID)
+    }
+  }
+
   private func resume(threadID: String) async throws {
     guard !subscribedThreadIDs.contains(threadID) else { return }
     let response = try await connection.request(
@@ -324,22 +331,6 @@ public actor CodexThreadService {
       if let activeTurnID = mapped.activeTurnID {
         activeTurnIDs[threadID] = activeTurnID
       }
-    }
-  }
-
-  private func queueMessage(threadID: String, text: String) throws {
-    let process = Process()
-    let output = Pipe()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["codex", "queue", "--thread", threadID, "--message", text]
-    process.standardOutput = output
-    process.standardError = output
-    try process.run()
-    process.waitUntilExit()
-    guard process.terminationStatus == 0 else {
-      let data = output.fileHandleForReading.readDataToEndOfFile()
-      let message = String(data: data, encoding: .utf8) ?? "codex queue failed"
-      throw AppServerFailure(code: Int(process.terminationStatus), message: message)
     }
   }
 

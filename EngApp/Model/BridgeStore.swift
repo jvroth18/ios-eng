@@ -197,12 +197,15 @@ final class BridgeStore: ObservableObject {
       connection = state
       if case .connected = state {
         sendHello()
-        attemptTrustedReconnect()
         #if DEBUG
           if let automaticPairingCode {
             pairingCode = automaticPairingCode
             pair()
+          } else {
+            attemptTrustedReconnect()
           }
+        #else
+          attemptTrustedReconnect()
         #endif
       } else if case .disconnected = state {
         isPaired = false

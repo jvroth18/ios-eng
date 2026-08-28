@@ -21,6 +21,10 @@ final class FakeBridgeClient: BridgeClientTransport, @unchecked Sendable {
   func send(_ envelope: BridgeEnvelope) throws {
     lock.withLock { outbound.append(envelope) }
   }
+
+  func emit(_ event: BridgeClientEvent) {
+    lock.withLock { handler }?(event)
+  }
 }
 
 @MainActor
@@ -158,5 +162,31 @@ struct BridgeStoreTests {
           BridgeError(code: "pairing_required", message: "Enter the code", recoverable: true))))
     #expect(!store.isPaired)
     #expect(store.presentedError?.code == "pairing_required")
+  }
+
+  @Test func selectedExistingThreadIsResubscribedAfterTransportPairing() {
+    let (store, client) = Self.makeStore()
+    store.subscribe(to: Self.thread("t1"))
+    Self.pair(store)
+
+    let subscriptions = client.sent.compactMap { message -> String? in
+      guard case .subscribe(let value) = message else { return nil }
+      return value.threadID
+    }
+    #expect(subscriptions == ["t1", "t1"])
+  }
+
+  @Test func debugAutomaticPairingDoesNotFirstSendAnEmptyTrustedCode() async {
+    let client = FakeBridgeClient()
+    let store = BridgeStore(client: client, arguments: ["-eng-pair-code", "123456"])
+    client.emit(.state(.connected("Mac")))
+    await Task.yield()
+
+    let codes = client.sent.compactMap { message -> String? in
+      guard case .pair(let request) = message else { return nil }
+      return request.code
+    }
+    #expect(codes == ["123456"])
+    _ = store
   }
 }

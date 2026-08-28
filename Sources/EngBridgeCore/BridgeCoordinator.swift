@@ -147,6 +147,16 @@ public actor BridgeCoordinator {
   }
 
   private func handlePaired(_ envelope: BridgeEnvelope, from peer: String) async {
+    guard PhoneCommandPolicy.permits(envelope.message) else {
+      sendError(
+        code: "phone_command_denied",
+        message: "This operation is outside the phone control policy.",
+        recoverable: false,
+        relatedTo: envelope.id,
+        to: peer
+      )
+      return
+    }
     do {
       switch envelope.message {
       case .refresh:

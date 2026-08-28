@@ -142,13 +142,14 @@ struct ThreadView: View {
     .overlay(alignment: .top) { Divider().overlay(EngDesign.border) }
   }
 
-  private var canSend: Bool { displayedThread.controlLevel != .observe && !store.isSending }
+  private var canSend: Bool { displayedThread.controlLevel == .live && !store.isSending }
 
   private var controlHint: String {
     switch displayedThread.controlLevel {
     case .live:
-      displayedThread.activeTurnID == nil ? "Starts a live turn on Mac" : "Steers the active turn"
-    case .message: "Queues safely to the owning CLI"
+      displayedThread.activeTurnID == nil
+        ? "Starts a new turn in this existing thread" : "Steers the active turn"
+    case .message: "Connecting this existing thread for live control"
     case .observe: "Read-only mirror for this thread"
     }
   }
