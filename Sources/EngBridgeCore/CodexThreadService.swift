@@ -16,18 +16,19 @@ public actor CodexThreadService {
 
   public nonisolated var events: AsyncStream<AppServerInbound> { connection.events }
 
-  private let connection: AppServerConnection
+  private let connection: any AppServerClient
   private let resolver: GitRepositoryResolver
   private let bridgeName: String
   private var rawThreads: [String: RawThread] = [:]
   private var summaries: [String: ThreadSummary] = [:]
-  private var liveThreadIDs = Set<String>()
+  private var loadedThreadIDs = Set<String>()
+  private var desiredThreadIDs = Set<String>()
   private var subscribedThreadIDs = Set<String>()
   private var activeTurnIDs: [String: String] = [:]
   private var pendingRequests: [String: PendingServerRequest] = [:]
 
   public init(
-    connection: AppServerConnection,
+    connection: any AppServerClient,
     resolver: GitRepositoryResolver = GitRepositoryResolver(),
     bridgeName: String = Host.current().localizedName ?? "Mac"
   ) {
@@ -37,6 +38,7 @@ public actor CodexThreadService {
   }
 
   public func refreshWorkspace(limit: Int? = nil) async throws -> WorkspaceSnapshot {
+    try await refreshLoadedThreads()
     var cursor: String?
     var collected: [JSONValue] = []
 
@@ -63,14 +65,9 @@ public actor CodexThreadService {
       let root = await resolver.repositoryRoot(for: cwd)
       let statusValue = value["status"]
       let activeFlags = statusValue?["activeFlags"]?.arrayValue?.compactMap(\.stringValue) ?? []
-      let canAccept = value["canAcceptDirectInput"]?.boolValue == true
-      let directlyControllable = Self.directControlAvailable(
-        statusType: statusValue?["type"]?.stringValue,
-        canAcceptDirectInput: canAccept
-      )
+      let directlyControllable = loadedThreadIDs.contains(id)
       let status = Self.runtimeStatus(statusValue, activeFlags: activeFlags)
-      let control: ThreadControlLevel =
-        liveThreadIDs.contains(id) || directlyControllable ? .live : .message
+      let control = controlLevel(for: id)
       let updated = Date(timeIntervalSince1970: value["updatedAt"]?.doubleValue ?? 0)
       let record = CodexThreadRecord(
         id: id,
@@ -99,8 +96,18 @@ public actor CodexThreadService {
   }
 
   public func subscribe(threadID: String) async throws -> ThreadDetail {
-    subscribedThreadIDs.insert(threadID)
+    desiredThreadIDs.insert(threadID)
+    try await resume(threadID: threadID)
     return try await threadDetail(threadID: threadID)
+  }
+
+  public func recoverSubscriptions() async throws {
+    subscribedThreadIDs.removeAll()
+    loadedThreadIDs.removeAll()
+    activeTurnIDs.removeAll()
+    pendingRequests.removeAll()
+    try await refreshLoadedThreads()
+    for threadID in desiredThreadIDs { try await resume(threadID: threadID) }
   }
 
   public func threadDetail(threadID: String) async throws -> ThreadDetail {
@@ -122,16 +129,16 @@ public actor CodexThreadService {
     let mapped = CodexTimelineMapper.mapTurns(Array(newestFirst.reversed()), threadID: threadID)
     if let activeTurnID = mapped.activeTurnID {
       activeTurnIDs[threadID] = activeTurnID
-      summary = Self.copy(
-        summary,
-        status: .active,
-        controlLevel: controlLevel(for: threadID),
-        activeTurnID: activeTurnID
-      )
-      summaries[threadID] = summary
     } else {
       activeTurnIDs.removeValue(forKey: threadID)
     }
+    summary = Self.copy(
+      summary,
+      status: mapped.activeTurnID == nil ? .idle : .active,
+      controlLevel: controlLevel(for: threadID),
+      activeTurnID: mapped.activeTurnID
+    )
+    summaries[threadID] = summary
 
     return ThreadDetail(
       thread: summary,
@@ -167,13 +174,7 @@ public actor CodexThreadService {
       return activeTurnID
     }
 
-    if !liveThreadIDs.contains(threadID) {
-      _ = try await connection.request(
-        method: "thread/resume",
-        params: ["threadId": .string(threadID)]
-      )
-      liveThreadIDs.insert(threadID)
-    }
+    try await resume(threadID: threadID)
 
     let response = try await connection.request(
       method: "turn/start",
@@ -212,6 +213,32 @@ public actor CodexThreadService {
       action: action
     )
     return action
+  }
+
+  public func recordNotification(method: String, params: JSONValue) {
+    guard let threadID = params["threadId"]?.stringValue else { return }
+    switch method {
+    case "turn/started":
+      if let turnID = params["turn"]?["id"]?.stringValue {
+        activeTurnIDs[threadID] = turnID
+      }
+    case "turn/completed":
+      activeTurnIDs.removeValue(forKey: threadID)
+    case "thread/status/changed":
+      let status = params["status"]?["type"]?.stringValue
+      if status == "notLoaded" {
+        loadedThreadIDs.remove(threadID)
+        subscribedThreadIDs.remove(threadID)
+      } else {
+        loadedThreadIDs.insert(threadID)
+      }
+    case "thread/closed":
+      loadedThreadIDs.remove(threadID)
+      subscribedThreadIDs.remove(threadID)
+      activeTurnIDs.removeValue(forKey: threadID)
+    default:
+      break
+    }
   }
 
   public func answerApproval(_ response: ApprovalResponse) async throws {
@@ -257,7 +284,7 @@ public actor CodexThreadService {
   }
 
   private func controlLevel(for threadID: String) -> ThreadControlLevel {
-    if liveThreadIDs.contains(threadID) || rawThreads[threadID]?.directlyControllable == true {
+    if loadedThreadIDs.contains(threadID) && subscribedThreadIDs.contains(threadID) {
       return .live
     }
     return .message
@@ -268,6 +295,36 @@ public actor CodexThreadService {
     canAcceptDirectInput: Bool
   ) -> Bool {
     canAcceptDirectInput || statusType == "active" || statusType == "idle"
+  }
+
+  private func refreshLoadedThreads() async throws {
+    var cursor: String?
+    var loaded = Set<String>()
+    repeat {
+      var params: [String: JSONValue] = ["limit": 100]
+      if let cursor { params["cursor"] = .string(cursor) }
+      let response = try await connection.request(
+        method: "thread/loaded/list", params: .object(params))
+      loaded.formUnion((response["data"]?.arrayValue ?? []).compactMap(\.stringValue))
+      cursor = response["nextCursor"]?.stringValue
+    } while cursor != nil
+    loadedThreadIDs = loaded
+  }
+
+  private func resume(threadID: String) async throws {
+    guard !subscribedThreadIDs.contains(threadID) else { return }
+    let response = try await connection.request(
+      method: "thread/resume",
+      params: ["threadId": .string(threadID)]
+    )
+    subscribedThreadIDs.insert(threadID)
+    loadedThreadIDs.insert(threadID)
+    if let turns = response["thread"]?["turns"]?.arrayValue {
+      let mapped = CodexTimelineMapper.mapTurns(turns, threadID: threadID)
+      if let activeTurnID = mapped.activeTurnID {
+        activeTurnIDs[threadID] = activeTurnID
+      }
+    }
   }
 
   private func queueMessage(threadID: String, text: String) throws {

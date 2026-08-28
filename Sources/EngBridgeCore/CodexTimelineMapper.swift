@@ -55,6 +55,41 @@ public enum CodexTimelineMapper {
       )
     }
 
+    if method == "item/commandExecution/outputDelta",
+      let delta = params["delta"]?.stringValue
+    {
+      return streamingItem(
+        kind: .command,
+        title: "Command output",
+        body: delta,
+        threadID: threadID,
+        turnID: turnID,
+        now: now
+      )
+    }
+
+    if method == "item/fileChange/outputDelta", let delta = params["delta"]?.stringValue {
+      return streamingItem(
+        kind: .fileChange,
+        title: "File changes",
+        body: delta,
+        threadID: threadID,
+        turnID: turnID,
+        now: now
+      )
+    }
+
+    if method == "item/plan/delta", let delta = params["delta"]?.stringValue {
+      return streamingItem(
+        kind: .plan,
+        title: "Plan",
+        body: delta,
+        threadID: threadID,
+        turnID: turnID,
+        now: now
+      )
+    }
+
     if method.contains("reasoning"), let delta = params["delta"]?.stringValue {
       return TimelineItem(
         id: "reasoning:\(turnID ?? threadID):\(now.timeIntervalSince1970)",
@@ -92,6 +127,26 @@ public enum CodexTimelineMapper {
     }
 
     return nil
+  }
+
+  private static func streamingItem(
+    kind: TimelineKind,
+    title: String,
+    body: String,
+    threadID: String,
+    turnID: String?,
+    now: Date
+  ) -> TimelineItem {
+    TimelineItem(
+      id: "delta:\(kind.rawValue):\(turnID ?? threadID):\(now.timeIntervalSince1970)",
+      threadID: threadID,
+      turnID: turnID,
+      kind: kind,
+      state: .running,
+      title: title,
+      body: body,
+      timestamp: now
+    )
   }
 
   private static func mapItem(

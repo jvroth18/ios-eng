@@ -76,6 +76,25 @@ struct AppServerMappingTests {
     #expect(item.body == "Half of a streamed answer")
   }
 
+  @Test func mapsCommandFileAndPlanStreamingDeltas() throws {
+    let cases: [(String, TimelineKind)] = [
+      ("item/commandExecution/outputDelta", .command),
+      ("item/fileChange/outputDelta", .fileChange),
+      ("item/plan/delta", .plan),
+    ]
+    for (method, kind) in cases {
+      let item = try #require(
+        CodexTimelineMapper.mapEvent(
+          method: method,
+          params: ["threadId": "thread-1", "turnId": "turn-1", "delta": "chunk"]
+        )
+      )
+      #expect(item.kind == kind)
+      #expect(item.state == .running)
+      #expect(item.body == "chunk")
+    }
+  }
+
   @Test func preservesServerRequestIDForPhoneResponse() async throws {
     let service = CodexThreadService(connection: AppServerConnection(), bridgeName: "Test Mac")
     let action = try #require(

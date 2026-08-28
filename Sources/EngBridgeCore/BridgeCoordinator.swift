@@ -83,6 +83,11 @@ public actor BridgeCoordinator {
   }
 
   public func appServerRecovered() async {
+    do {
+      try await service.recoverSubscriptions()
+    } catch {
+      statusHandler("Could not restore live thread subscriptions: \(error.localizedDescription)")
+    }
     await refreshNow(forceBroadcast: true)
     for peer in subscriptions.keys {
       await sendSubscribedDetail(to: peer)
@@ -286,12 +291,15 @@ public actor BridgeCoordinator {
         await sendSubscribedDetail(to: peer)
       }
     case .notification(let method, let params):
+      await service.recordNotification(method: method, params: params)
       if let item = CodexTimelineMapper.mapEvent(method: method, params: params) {
         for (peer, threadID) in subscriptions where threadID == item.threadID {
           try? transport.send(BridgeEnvelope(message: .timelineEvent(item)), to: peer)
         }
       }
-      if method == "turn/completed" || method == "thread/status/changed" {
+      if method == "turn/started" || method == "turn/completed"
+        || method == "thread/status/changed"
+      {
         await refreshNow()
         if let threadID = params["threadId"]?.stringValue {
           for (peer, selectedID) in subscriptions where selectedID == threadID {

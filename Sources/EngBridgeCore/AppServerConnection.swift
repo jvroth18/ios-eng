@@ -5,6 +5,13 @@ public enum AppServerInbound: Equatable, Sendable {
   case request(id: JSONValue, method: String, params: JSONValue)
 }
 
+public protocol AppServerClient: Sendable {
+  var events: AsyncStream<AppServerInbound> { get }
+
+  func request(method: String, params: JSONValue) async throws -> JSONValue
+  func respond(id: JSONValue, result: JSONValue) async throws
+}
+
 public struct AppServerFailure: Error, Equatable, Sendable, CustomStringConvertible,
   LocalizedError
 {
@@ -23,6 +30,8 @@ public struct AppServerFailure: Error, Equatable, Sendable, CustomStringConverti
 
   public var errorDescription: String? { description }
 }
+
+extension AppServerConnection: AppServerClient {}
 
 public actor AppServerConnection {
   public nonisolated let events: AsyncStream<AppServerInbound>
