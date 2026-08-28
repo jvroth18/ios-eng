@@ -100,6 +100,36 @@ struct BridgeStoreTests {
     #expect(second.hasDraft("t2"))
   }
 
+  @Test func hiddenThreadsPersistStayQuietAndCanBeRestored() {
+    let defaults = Self.isolatedPreferences()
+    let first = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
+    let t1 = Self.thread("t1")
+    let t2 = Self.thread("t2")
+    first.receive(BridgeEnvelope(message: .workspaceSnapshot(Self.workspace([t1, t2]))))
+    first.updateDraft("Hidden draft", for: "t1")
+    first.updateDraft("Visible draft", for: "t2")
+
+    first.hideThread("t1")
+    first.receive(
+      BridgeEnvelope(
+        message: .workspaceSnapshot(
+          Self.workspace([Self.thread("t1", updatedAt: Self.now.addingTimeInterval(10)), t2]))))
+
+    #expect(first.isThreadHidden("t1"))
+    #expect(first.hiddenThreadCount == 1)
+    #expect(first.unreadCount == 0)
+    #expect(first.unreadNotification == nil)
+    #expect(first.draftCount == 1)
+    #expect(first.draft(for: "t1") == "Hidden draft")
+
+    let second = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
+    second.receive(BridgeEnvelope(message: .workspaceSnapshot(Self.workspace([t1, t2]))))
+    #expect(second.isThreadHidden("t1"))
+    second.unhideThread("t1")
+    #expect(!second.isThreadHidden("t1"))
+    #expect(second.draftCount == 2)
+  }
+
   private static func thread(_ id: String, updatedAt: Date = now) -> ThreadSummary {
     ThreadSummary(
       id: id, title: "Thread \(id)", preview: "", cwd: "/tmp/\(id)", repositoryRoot: "/tmp/\(id)",

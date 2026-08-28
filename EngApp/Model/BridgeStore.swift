@@ -54,6 +54,7 @@ final class BridgeStore: ObservableObject {
   @Published private(set) var activitySummaries: [String: String] = [:]
   @Published private(set) var pinnedProjectIDs: Set<String>
   @Published private(set) var unreadThreadIDs: Set<String>
+  @Published private(set) var hiddenThreadIDs: Set<String>
   @Published private(set) var unreadNotification: ThreadUnreadNotification?
   @Published private(set) var threadDrafts: [String: String]
   @Published var focusPinnedOnly: Bool {
@@ -105,6 +106,7 @@ final class BridgeStore: ObservableObject {
     self.preferences = preferences
     pinnedProjectIDs = Set(preferences.stringArray(forKey: PreferenceKey.pinnedProjectIDs) ?? [])
     unreadThreadIDs = Set(preferences.stringArray(forKey: PreferenceKey.unreadThreadIDs) ?? [])
+    hiddenThreadIDs = Set(preferences.stringArray(forKey: PreferenceKey.hiddenThreadIDs) ?? [])
     threadDrafts =
       preferences.dictionary(forKey: PreferenceKey.threadDrafts) as? [String: String]
       ?? [:]
@@ -147,8 +149,16 @@ final class BridgeStore: ObservableObject {
     projects.lazy.filter { self.pinnedProjectIDs.contains($0.id) }.count
   }
 
-  var unreadCount: Int { unreadThreadIDs.count }
-  var draftCount: Int { threadDrafts.count }
+  var unreadCount: Int { unreadThreadIDs.subtracting(hiddenThreadIDs).count }
+  var draftCount: Int { Set(threadDrafts.keys).subtracting(hiddenThreadIDs).count }
+
+  var hiddenThreads: [ThreadSummary] {
+    projects.flatMap(\.threads)
+      .filter { hiddenThreadIDs.contains($0.id) }
+      .sorted { $0.updatedAt > $1.updatedAt }
+  }
+
+  var hiddenThreadCount: Int { hiddenThreads.count }
 
   var isConnected: Bool {
     if case .connected = connection { return true }
@@ -225,11 +235,31 @@ final class BridgeStore: ObservableObject {
   }
 
   func isThreadUnread(_ threadID: String) -> Bool {
-    unreadThreadIDs.contains(threadID)
+    unreadThreadIDs.contains(threadID) && !hiddenThreadIDs.contains(threadID)
   }
 
   func unreadCount(in threads: [ThreadSummary]) -> Int {
-    threads.lazy.filter { self.unreadThreadIDs.contains($0.id) }.count
+    threads.lazy.filter { self.isThreadUnread($0.id) }.count
+  }
+
+  func isThreadHidden(_ threadID: String) -> Bool {
+    hiddenThreadIDs.contains(threadID)
+  }
+
+  func hideThread(_ threadID: String) {
+    hiddenThreadIDs.insert(threadID)
+    markThreadRead(threadID)
+    persistHiddenThreads()
+  }
+
+  func unhideThread(_ threadID: String) {
+    hiddenThreadIDs.remove(threadID)
+    persistHiddenThreads()
+  }
+
+  func unhideAllThreads() {
+    hiddenThreadIDs.removeAll()
+    persistHiddenThreads()
   }
 
   func draft(for threadID: String) -> String {
@@ -501,7 +531,7 @@ final class BridgeStore: ObservableObject {
       let timestamp = thread.updatedAt.timeIntervalSince1970
       let previous = observedThreadUpdates[thread.id]
       let isNewActivity = previous.map { timestamp > $0 + 0.001 } ?? hadWorkspace
-      if isNewActivity, visibleThreadID != thread.id {
+      if isNewActivity, visibleThreadID != thread.id, !hiddenThreadIDs.contains(thread.id) {
         unreadThreadIDs.insert(thread.id)
         if newestUnread == nil || thread.updatedAt > newestUnread!.updatedAt {
           newestUnread = thread
@@ -512,8 +542,10 @@ final class BridgeStore: ObservableObject {
     }
 
     unreadThreadIDs.formIntersection(validIDs)
+    hiddenThreadIDs.formIntersection(validIDs)
     observedThreadUpdates = observedThreadUpdates.filter { validIDs.contains($0.key) }
     persistUnreadState()
+    persistHiddenThreads()
     workspace = stabilized
     if let newestUnread {
       unreadNotification = ThreadUnreadNotification(
@@ -530,7 +562,9 @@ final class BridgeStore: ObservableObject {
       observedThreadUpdates[item.threadID] ?? timestamp,
       timestamp
     )
-    if visibleThreadID != item.threadID {
+    if hiddenThreadIDs.contains(item.threadID) {
+      markThreadRead(item.threadID)
+    } else if visibleThreadID != item.threadID {
       markThreadUnread(item.threadID, detail: item.title)
     } else {
       markThreadRead(item.threadID)
@@ -787,6 +821,7 @@ final class BridgeStore: ObservableObject {
     static let focusPinnedOnly = "eng.focus-pinned-only"
     static let connectionPreference = "eng.connection-preference"
     static let unreadThreadIDs = "eng.unread-thread-ids"
+    static let hiddenThreadIDs = "eng.hidden-thread-ids"
     static let observedThreadUpdates = "eng.observed-thread-updates"
     static let threadDrafts = "eng.thread-drafts"
   }
@@ -813,6 +848,10 @@ final class BridgeStore: ObservableObject {
     preferences.set(observedThreadUpdates, forKey: PreferenceKey.observedThreadUpdates)
   }
 
+  private func persistHiddenThreads() {
+    preferences.set(Array(hiddenThreadIDs).sorted(), forKey: PreferenceKey.hiddenThreadIDs)
+  }
+
   private func applyDemoState() {
     #if DEBUG
       connection = .connected("Jordan’s MacBook Pro")
@@ -824,6 +863,7 @@ final class BridgeStore: ObservableObject {
       phoneHistory = DemoFixtures.phoneHistory
       macHistory = DemoFixtures.macHistory
       unreadThreadIDs = ["demo-waiting"]
+      hiddenThreadIDs = ["demo-saved"]
       unreadNotification = ThreadUnreadNotification(
         threadID: "demo-waiting",
         title: "Review transport safeguards",

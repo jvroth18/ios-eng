@@ -8,6 +8,7 @@ struct RootView: View {
   private static var initialTab: EngTab {
     #if DEBUG
       if ProcessInfo.processInfo.arguments.contains("-eng-analytics") { return .analytics }
+      if ProcessInfo.processInfo.arguments.contains("-eng-config") { return .config }
     #endif
     return .projects
   }

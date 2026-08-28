@@ -8,6 +8,7 @@ struct ConfigView: View {
       VStack(alignment: .leading, spacing: 12) {
         connectionGroup
         focusGroup
+        hiddenThreadsGroup
         timeGroup
       }
       .padding(6)
@@ -107,6 +108,53 @@ struct ConfigView: View {
       )
       .font(Win95Font.small)
       .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
+  private var hiddenThreadsGroup: some View {
+    Win95GroupBox(title: "Hidden threads (\(store.hiddenThreadCount))") {
+      VStack(alignment: .leading, spacing: 8) {
+        Text(
+          "Hidden threads stay on your Mac and can be restored here. Eng never archives or deletes them."
+        )
+        .font(Win95Font.small)
+        .fixedSize(horizontal: false, vertical: true)
+
+        if store.hiddenThreads.isEmpty {
+          Text("No hidden threads.")
+            .font(Win95Font.small)
+            .foregroundStyle(Win95.shadow)
+        } else {
+          VStack(spacing: 0) {
+            ForEach(store.hiddenThreads) { thread in
+              HStack(spacing: 7) {
+                Image(systemName: "eye.slash")
+                  .font(.system(size: 12))
+                VStack(alignment: .leading, spacing: 1) {
+                  Text(thread.title)
+                    .font(Win95Font.bold)
+                    .lineLimit(1)
+                  Text(thread.repositoryRoot)
+                    .font(Win95Font.monoSmall)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                }
+                Spacer(minLength: 5)
+                Button("Unhide") { store.unhideThread(thread.id) }
+                  .buttonStyle(Win95ButtonStyle(compact: true))
+              }
+              .padding(5)
+              if thread.id != store.hiddenThreads.last?.id {
+                Rectangle().fill(Win95.shadow).frame(height: 1)
+              }
+            }
+          }
+          .sunkenPaper()
+
+          Button("Unhide all") { store.unhideAllThreads() }
+            .buttonStyle(Win95ButtonStyle(compact: true))
+        }
+      }
     }
   }
 }

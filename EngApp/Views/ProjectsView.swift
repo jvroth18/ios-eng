@@ -86,7 +86,9 @@ struct ProjectsView: View {
     .padding(.horizontal, 20)
   }
 
-  private var allThreads: [ThreadSummary] { store.projects.flatMap(\.threads) }
+  private var allThreads: [ThreadSummary] {
+    store.projects.flatMap(\.threads).filter { !store.isThreadHidden($0.id) }
+  }
   private var liveThreads: [ThreadSummary] { allThreads.filter { $0.controlLevel == .live } }
 
   /// Projects sorted by most recent thread activity, filtered by the search field and
@@ -98,7 +100,7 @@ struct ProjectsView: View {
       store.projects
       .filter { !store.focusPinnedOnly || store.isProjectPinned($0.id) }
       .compactMap { project -> ProjectEntry? in
-        var threads = project.threads
+        var threads = project.threads.filter { !store.isThreadHidden($0.id) }
         if activeOnly {
           threads = threads.filter { $0.status == .active || $0.status == .waiting }
         }
@@ -112,7 +114,7 @@ struct ProjectsView: View {
             }
           }
         }
-        guard !threads.isEmpty || (needle.isEmpty && !activeOnly) else { return nil }
+        guard !threads.isEmpty else { return nil }
         return ProjectEntry(project: project, threads: threads)
       }
       .enumerated()
@@ -173,8 +175,9 @@ private struct ProjectNode: View {
               .truncationMode(.head)
               .opacity(0.7)
             Spacer(minLength: 4)
-            if project.activeThreadCount > 0 {
-              Text("\(project.activeThreadCount) active")
+            let activeCount = threads.filter { $0.status == .active || $0.status == .waiting }.count
+            if activeCount > 0 {
+              Text("\(activeCount) active")
                 .font(Win95Font.smallBold)
             }
             let unread = store.unreadCount(in: threads)
@@ -203,14 +206,29 @@ private struct ProjectNode: View {
 
       if !collapsed {
         ForEach(visibleThreads) { thread in
-          NavigationLink {
-            ThreadView(thread: thread)
-              .navigationTransition(.zoom(sourceID: thread.id, in: transitionNamespace))
-          } label: {
-            ThreadRow(thread: thread)
-              .matchedTransitionSource(id: thread.id, in: transitionNamespace)
+          HStack(spacing: 0) {
+            NavigationLink {
+              ThreadView(thread: thread)
+                .navigationTransition(.zoom(sourceID: thread.id, in: transitionNamespace))
+            } label: {
+              ThreadRow(thread: thread)
+                .matchedTransitionSource(id: thread.id, in: transitionNamespace)
+            }
+            .buttonStyle(Win95RowStyle())
+            .frame(maxWidth: .infinity)
+
+            Button {
+              store.hideThread(thread.id)
+            } label: {
+              Image(systemName: "eye.slash")
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 30, height: 28)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(Win95RowStyle())
+            .accessibilityLabel("Hide \(thread.title)")
           }
-          .buttonStyle(Win95RowStyle())
+          .padding(.trailing, 3)
         }
         if hiddenCount > 0 || (showsAll && threads.count > ProjectsView.previewThreadLimit) {
           Button(action: onToggleShowAll) {
