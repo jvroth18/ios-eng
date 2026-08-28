@@ -17,6 +17,7 @@ public actor CodexThreadService {
   public nonisolated var events: AsyncStream<AppServerInbound> { connection.events }
 
   private let connection: any AppServerClient
+  private let externalController: any ExternalThreadControlling
   private let resolver: GitRepositoryResolver
   private let bridgeName: String
   private var rawThreads: [String: RawThread] = [:]
@@ -31,10 +32,12 @@ public actor CodexThreadService {
   public init(
     connection: any AppServerClient,
     resolver: GitRepositoryResolver = GitRepositoryResolver(),
+    externalController: any ExternalThreadControlling = CodexCLIExternalThreadController(),
     bridgeName: String = Host.current().localizedName ?? "Mac"
   ) {
     self.connection = connection
     self.resolver = resolver
+    self.externalController = externalController
     self.bridgeName = bridgeName
   }
 
@@ -171,6 +174,11 @@ public actor CodexThreadService {
     }
     let detail = try await threadDetail(threadID: threadID)
 
+    if externallyOwnedThreadIDs.contains(threadID) {
+      try await externalController.queue(threadID: threadID, message: normalized)
+      return detail.thread.activeTurnID
+    }
+
     if let activeTurnID = detail.thread.activeTurnID {
       guard controlLevel(for: threadID) == .live else {
         throw AppServerFailure(message: "Resume this existing thread before steering it")
@@ -201,6 +209,10 @@ public actor CodexThreadService {
   }
 
   public func interrupt(threadID: String, turnID: String) async throws {
+    if externallyOwnedThreadIDs.contains(threadID) {
+      try await externalController.interrupt(threadID: threadID)
+      return
+    }
     guard controlLevel(for: threadID) == .live else {
       throw AppServerFailure(message: "This CLI thread is not under live bridge control")
     }

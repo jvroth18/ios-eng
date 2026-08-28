@@ -24,11 +24,17 @@ The bridge asks Codex App Server for CLI and IDE threads, resolves each working 
 Each thread exposes a truthful control level:
 
 - `available`: persisted history is visible and the bridge can attempt to resume the existing thread.
+- `Mac Live`: another Mac Codex process owns the writer lock. Eng polls a bounded recent transcript and queues phone messages through the installed Codex CLI without trying to acquire a second writer.
 - `live`: `thread/resume` succeeded on the bridge connection, so it receives item and turn notifications and may steer or interrupt the active turn, start a turn inside that same thread, and answer supported requests.
 
 Every refresh checks `thread/loaded/list` and resumes loaded threads on the bridge connection. This is what makes an active CLI or IDE thread stream to Eng even when another App Server client created it. A phone selection is also retained as a desired subscription and resumed again after an App Server reconnect. Existing independent sessions therefore become live without duplicating the thread.
 
 The phone command policy is an allowlist. It permits refresh, subscribe, message or steer, interrupt, supported approval and user-input responses, analytics, and link probes. There is no phone message for `thread/start`, fork, archive, delete, shell execution, or arbitrary App Server JSON-RPC. When the selected existing thread is idle, phone text uses `turn/start` with that thread ID; when it is active, it uses `turn/steer` with the expected turn ID.
+
+For a `Mac Live` thread, message delivery uses `codex queue --thread … --message
+…`, which preserves the existing owner. Stop mirrors Ctrl-C only when the writer
+lock resolves to exactly one same-user interactive `codex` process. The bridge
+refuses to signal GUI, noninteractive, ambiguous, or unverified processes.
 
 ## Transport and pairing
 
@@ -63,7 +69,7 @@ iOS does not expose an exact device temperature to a normal app. Eng therefore r
 
 - Connection loss keeps the last snapshot visible with a stale timestamp and reconnects nearby.
 - A supervisor health-checks the loopback App Server, replaces a failed child with bounded exponential backoff, reinitializes the WebSocket exactly once per connection, and restores desired thread subscriptions.
-- UI controls remain unavailable until the bridge has proven a live `thread/resume` subscription; a persisted status guess is not treated as connectivity.
+- UI controls use direct App Server methods only after a live `thread/resume` subscription. `Mac Live` controls instead use the separately validated queue and interactive-CLI Stop paths.
 - A message is not shown as delivered until the bridge acknowledges its Codex operation.
 - Approval and user-input cards retain their request IDs and become terminal after one response.
 - Unknown Codex events degrade to a compact activity entry rather than breaking the stream.

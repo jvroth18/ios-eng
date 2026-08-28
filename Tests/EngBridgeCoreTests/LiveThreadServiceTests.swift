@@ -34,6 +34,7 @@ struct LiveThreadServiceTests {
 
   @Test func activeWriterStillOpensAsAReadableMacLiveThread() async throws {
     let client = MockAppServerClient()
+    let external = MockExternalThreadController()
     await client.enqueue(method: "thread/loaded/list", response: ["data": []])
     await client.enqueue(
       method: "thread/list",
@@ -46,7 +47,8 @@ struct LiveThreadServiceTests {
         message: "thread thread-1 already has an active writer"
       ))
     await client.enqueue(method: "thread/turns/list", response: ["data": [Self.activeTurn]])
-    let service = CodexThreadService(connection: client, bridgeName: "Test Mac")
+    let service = CodexThreadService(
+      connection: client, externalController: external, bridgeName: "Test Mac")
 
     _ = try await service.refreshWorkspace()
     let detail = try await service.subscribe(threadID: "thread-1")
@@ -55,6 +57,54 @@ struct LiveThreadServiceTests {
     #expect(detail.thread.activeTurnID == "turn-1")
     #expect(!detail.timeline.isEmpty)
     #expect(!(await service.isSubscribed(threadID: "thread-1")))
+  }
+
+  @Test func activeWriterMessagesQueueIntoTheOwningMacSession() async throws {
+    let client = MockAppServerClient()
+    let external = MockExternalThreadController()
+    await client.enqueue(method: "thread/loaded/list", response: ["data": []])
+    await client.enqueue(
+      method: "thread/list",
+      response: ["data": [Self.thread(status: "active")], "nextCursor": nil]
+    )
+    await client.enqueueFailure(
+      method: "thread/resume",
+      failure: AppServerFailure(
+        code: -32_600, message: "thread thread-1 already has an active writer"))
+    await client.enqueue(method: "thread/turns/list", response: ["data": [Self.activeTurn]])
+    await client.enqueue(method: "thread/turns/list", response: ["data": [Self.activeTurn]])
+    let service = CodexThreadService(
+      connection: client, externalController: external, bridgeName: "Test Mac")
+
+    _ = try await service.refreshWorkspace()
+    _ = try await service.subscribe(threadID: "thread-1")
+    #expect(
+      try await service.sendMessage(threadID: "thread-1", text: "Continue safely") == "turn-1")
+    #expect(await external.queuedMessages == ["thread-1:Continue safely"])
+    #expect(!(await client.requestedMethods.contains("turn/steer")))
+  }
+
+  @Test func activeWriterStopTargetsTheOwningMacSession() async throws {
+    let client = MockAppServerClient()
+    let external = MockExternalThreadController()
+    await client.enqueue(method: "thread/loaded/list", response: ["data": []])
+    await client.enqueue(
+      method: "thread/list",
+      response: ["data": [Self.thread(status: "active")], "nextCursor": nil]
+    )
+    await client.enqueueFailure(
+      method: "thread/resume",
+      failure: AppServerFailure(
+        code: -32_600, message: "thread thread-1 already has an active writer"))
+    await client.enqueue(method: "thread/turns/list", response: ["data": [Self.activeTurn]])
+    let service = CodexThreadService(
+      connection: client, externalController: external, bridgeName: "Test Mac")
+
+    _ = try await service.refreshWorkspace()
+    _ = try await service.subscribe(threadID: "thread-1")
+    try await service.interrupt(threadID: "thread-1", turnID: "turn-1")
+    #expect(await external.interruptedThreads == ["thread-1"])
+    #expect(!(await client.requestedMethods.contains("turn/interrupt")))
   }
 
   @Test func recoveryResumesEveryDesiredPhoneSubscription() async throws {
@@ -205,4 +255,17 @@ private actor MockAppServerClient: AppServerClient {
   }
 
   func respond(id: JSONValue, result: JSONValue) {}
+}
+
+private actor MockExternalThreadController: ExternalThreadControlling {
+  private(set) var queuedMessages: [String] = []
+  private(set) var interruptedThreads: [String] = []
+
+  func queue(threadID: String, message: String) {
+    queuedMessages.append("\(threadID):\(message)")
+  }
+
+  func interrupt(threadID: String) {
+    interruptedThreads.append(threadID)
+  }
 }

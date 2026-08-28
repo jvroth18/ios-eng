@@ -71,7 +71,9 @@ struct ThreadView: View {
       }
       .buttonStyle(Win95ButtonStyle(compact: true))
 
-      if let turnID = displayedThread.activeTurnID, displayedThread.controlLevel == .live {
+      if let turnID = displayedThread.activeTurnID,
+        displayedThread.controlLevel == .live || displayedThread.controlLevel == .observe
+      {
         Button {
           store.interrupt(threadID: displayedThread.id, turnID: turnID)
         } label: {
@@ -229,10 +231,14 @@ struct ThreadView: View {
     }
   }
 
-  private var canSend: Bool { displayedThread.controlLevel == .live && !store.isSending }
+  private var canSend: Bool {
+    (displayedThread.controlLevel == .live || displayedThread.controlLevel == .observe)
+      && !store.isSending
+  }
 
   private var sendLabel: String {
     if store.isSending { return "Sending…" }
+    if displayedThread.controlLevel == .observe { return "Queue" }
     return displayedThread.activeTurnID == nil ? "Send" : "Steer"
   }
 
@@ -243,7 +249,7 @@ struct ThreadView: View {
         ? "Live — starts a new turn in this existing thread"
         : "Live — steers the active turn"
     case .message: "Connecting this existing thread for live control"
-    case .observe: "Mac Live — following the active writer on your Mac"
+    case .observe: "Mac Live — following activity; messages queue into the Mac session"
     }
   }
 }
