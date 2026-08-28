@@ -54,6 +54,7 @@ final class BridgeStore: ObservableObject {
   @Published private(set) var pinnedProjectIDs: Set<String>
   @Published private(set) var unreadThreadIDs: Set<String>
   @Published private(set) var unreadNotification: ThreadUnreadNotification?
+  @Published private(set) var threadDrafts: [String: String]
   @Published var focusPinnedOnly: Bool {
     didSet { preferences.set(focusPinnedOnly, forKey: PreferenceKey.focusPinnedOnly) }
   }
@@ -102,6 +103,9 @@ final class BridgeStore: ObservableObject {
     self.preferences = preferences
     pinnedProjectIDs = Set(preferences.stringArray(forKey: PreferenceKey.pinnedProjectIDs) ?? [])
     unreadThreadIDs = Set(preferences.stringArray(forKey: PreferenceKey.unreadThreadIDs) ?? [])
+    threadDrafts =
+      preferences.dictionary(forKey: PreferenceKey.threadDrafts) as? [String: String]
+      ?? [:]
     observedThreadUpdates =
       preferences.dictionary(forKey: PreferenceKey.observedThreadUpdates) as? [String: Double]
       ?? [:]
@@ -142,6 +146,7 @@ final class BridgeStore: ObservableObject {
   }
 
   var unreadCount: Int { unreadThreadIDs.count }
+  var draftCount: Int { threadDrafts.count }
 
   var isConnected: Bool {
     if case .connected = connection { return true }
@@ -223,6 +228,28 @@ final class BridgeStore: ObservableObject {
 
   func unreadCount(in threads: [ThreadSummary]) -> Int {
     threads.lazy.filter { self.unreadThreadIDs.contains($0.id) }.count
+  }
+
+  func draft(for threadID: String) -> String {
+    threadDrafts[threadID] ?? ""
+  }
+
+  func hasDraft(_ threadID: String) -> Bool {
+    !(threadDrafts[threadID]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+  }
+
+  func updateDraft(_ text: String, for threadID: String) {
+    if text.isEmpty {
+      threadDrafts.removeValue(forKey: threadID)
+    } else {
+      threadDrafts[threadID] = text
+    }
+    preferences.set(threadDrafts, forKey: PreferenceKey.threadDrafts)
+  }
+
+  func clearDraft(for threadID: String) {
+    threadDrafts.removeValue(forKey: threadID)
+    preferences.set(threadDrafts, forKey: PreferenceKey.threadDrafts)
   }
 
   func currentActivitySummary(for thread: ThreadSummary) -> String? {
@@ -705,6 +732,7 @@ final class BridgeStore: ObservableObject {
     static let connectionPreference = "eng.connection-preference"
     static let unreadThreadIDs = "eng.unread-thread-ids"
     static let observedThreadUpdates = "eng.observed-thread-updates"
+    static let threadDrafts = "eng.thread-drafts"
   }
 
   private func markThreadUnread(_ threadID: String, detail: String) {
@@ -745,6 +773,7 @@ final class BridgeStore: ObservableObject {
         title: "Review transport safeguards",
         detail: "Waiting for you"
       )
+      threadDrafts[DemoFixtures.liveThread.id] = "Remember to verify the keyboard transition"
     #endif
   }
 }

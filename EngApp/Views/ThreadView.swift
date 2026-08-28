@@ -1,13 +1,14 @@
 import EngCore
 import SwiftUI
+import UIKit
 
 struct ThreadView: View {
   @EnvironmentObject private var store: BridgeStore
   @Environment(\.dismiss) private var dismiss
   let thread: ThreadSummary
 
-  @State private var draft = ""
   @State private var followsTail = true
+  @State private var keyboardPresented = false
   @FocusState private var composerFocused: Bool
 
   var body: some View {
@@ -31,11 +32,23 @@ struct ThreadView: View {
         .padding(.bottom, 2)
       }
       .padding(6)
+      .offset(y: keyboardPresented ? -36 : 0)
     }
     .toolbar(.hidden, for: .navigationBar)
     .navigationBarBackButtonHidden(true)
     .task(id: thread.id) { store.subscribe(to: thread) }
     .onDisappear { store.closeThread(threadID: thread.id) }
+    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification))
+    {
+      _ in
+      keyboardPresented = true
+    }
+    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification))
+    {
+      _ in
+      keyboardPresented = false
+    }
+    .animation(.easeInOut(duration: 0.22), value: keyboardPresented)
   }
 
   private var displayedDetail: ThreadDetail? {
@@ -71,19 +84,24 @@ struct ThreadView: View {
       }
       .buttonStyle(Win95ButtonStyle(compact: true))
 
-      if let turnID = displayedThread.activeTurnID,
-        displayedThread.controlLevel == .live || displayedThread.controlLevel == .observe
-      {
-        Button {
+      Button {
+        if let turnID = displayedThread.activeTurnID {
           store.interrupt(threadID: displayedThread.id, turnID: turnID)
-        } label: {
-          Label("Stop", systemImage: "stop.fill")
         }
-        .buttonStyle(Win95ButtonStyle(compact: true))
-        .accessibilityLabel("Interrupt current turn")
+      } label: {
+        Label("Stop", systemImage: "stop.fill")
       }
+      .buttonStyle(Win95ButtonStyle(compact: true))
+      .disabled(!canStop)
+      .accessibilityLabel("Interrupt current turn")
 
       Spacer(minLength: 4)
+
+      if store.hasDraft(displayedThread.id) {
+        Text("Draft saved")
+          .font(Win95Font.small)
+          .foregroundStyle(Win95.text)
+      }
 
       HStack(spacing: 6) {
         Win95LED(
@@ -191,25 +209,41 @@ struct ThreadView: View {
 
   private var composer: some View {
     HStack(alignment: .bottom, spacing: 6) {
-      TextField("Type a message to Codex", text: $draft, axis: .vertical)
+      TextField("Type a message to Codex", text: draftBinding, axis: .vertical)
         .lineLimit(1...5)
         .focused($composerFocused)
         .win95Field()
 
       Button(sendLabel) {
-        let message = draft
-        draft = ""
+        let message = store.draft(for: displayedThread.id)
+        store.clearDraft(for: displayedThread.id)
         composerFocused = false
         store.sendMessage(message, to: displayedThread.id)
       }
       .buttonStyle(Win95ButtonStyle(isDefault: true))
-      .disabled(!canSend || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      .disabled(
+        !canSend
+          || store.draft(for: displayedThread.id)
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      )
     }
+  }
+
+  private var draftBinding: Binding<String> {
+    Binding(
+      get: { store.draft(for: displayedThread.id) },
+      set: { store.updateDraft($0, for: displayedThread.id) }
+    )
   }
 
   private var canSend: Bool {
     (displayedThread.controlLevel == .live || displayedThread.controlLevel == .observe)
       && !store.isSending
+  }
+
+  private var canStop: Bool {
+    displayedThread.activeTurnID != nil
+      && (displayedThread.controlLevel == .live || displayedThread.controlLevel == .observe)
   }
 
   private var sendLabel: String {

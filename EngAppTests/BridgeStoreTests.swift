@@ -82,6 +82,24 @@ struct BridgeStoreTests {
     #expect(!second.isProjectPinned("ios-eng"))
   }
 
+  @Test func perThreadDraftsPersistAndClearIndependently() {
+    let defaults = Self.isolatedPreferences()
+    let first = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
+
+    first.updateDraft("Message one", for: "t1")
+    first.updateDraft("Message two", for: "t2")
+    #expect(first.hasDraft("t1"))
+    #expect(first.draftCount == 2)
+
+    let second = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
+    #expect(second.draft(for: "t1") == "Message one")
+    #expect(second.draft(for: "t2") == "Message two")
+
+    second.clearDraft(for: "t1")
+    #expect(!second.hasDraft("t1"))
+    #expect(second.hasDraft("t2"))
+  }
+
   private static func thread(_ id: String, updatedAt: Date = now) -> ThreadSummary {
     ThreadSummary(
       id: id, title: "Thread \(id)", preview: "", cwd: "/tmp/\(id)", repositoryRoot: "/tmp/\(id)",

@@ -30,6 +30,7 @@ struct ProjectsView: View {
         "\(visibleProjects.count) shown",
         "\(allThreads.count) threads",
         "\(store.unreadCount) unread",
+        "\(store.draftCount) drafts",
         "\(store.pinnedProjectCount) pinned",
         "\(liveThreads.count) live",
       ])
@@ -292,6 +293,15 @@ private struct ThreadRow: View {
           .padding(.vertical, 2)
           .background(Win95.highlight)
           .accessibilityLabel("Unread")
+      }
+      if store.hasDraft(thread.id) {
+        Text("DRAFT")
+          .font(Win95Font.smallBold)
+          .foregroundStyle(Win95.text)
+          .padding(.horizontal, 5)
+          .padding(.vertical, 2)
+          .background(Win95.warning)
+          .accessibilityLabel("Saved draft")
       }
     }
     .padding(.leading, 22)
