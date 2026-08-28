@@ -2,6 +2,11 @@
 
 Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 Pro simulator, and Jordan's paired iPhone 17 Pro.
 
+The expanded conversation now reserves animation for the single current-activity
+LED. The toolbar status and running-item LEDs remain steadily lit, preventing three
+independent blink loops from competing while a thread is working. This repair is
+released as Eng 0.5.2 (build 8).
+
 ## Contracts and unit coverage
 
 - `swift format lint --strict` passes across app, bridge, shared sources, tests, and scripts.

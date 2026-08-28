@@ -88,7 +88,7 @@ struct ThreadView: View {
       HStack(spacing: 6) {
         Win95LED(
           color: displayedThread.status.ledColor,
-          blinking: displayedThread.status.ledBlinks
+          blinking: false
         )
         Text(displayedThread.status.presentationLabel)
           .font(Win95Font.small)
@@ -356,7 +356,7 @@ private struct ActivityRow: View {
             .lineLimit(1)
           Spacer(minLength: 4)
           if item.state == .running {
-            Win95LED(color: Win95.ledGreen, blinking: true)
+            Win95LED(color: Win95.ledGreen, blinking: false)
           }
           Text(item.state.rawValue.capitalized)
             .font(Win95Font.small)
