@@ -6,6 +6,8 @@ final class AdaptiveBridgeClient: @unchecked Sendable {
   private let wifi: WiFiClient
   private let lock = NSLock()
   private var eventHandler: (@Sendable (BridgeClientEvent) -> Void)?
+  private var preference = ConnectionPreference.automatic
+  private var isStarted = false
 
   init(displayName: String, deviceID: UUID) {
     nearby = NearbyClient(displayName: displayName)
@@ -22,13 +24,23 @@ final class AdaptiveBridgeClient: @unchecked Sendable {
   }
 
   func start() {
-    wifi.start()
-    nearby.start()
+    lock.withLock { isStarted = true }
+    applyConnectionPreference()
   }
 
   func stop() {
+    lock.withLock { isStarted = false }
     wifi.stop()
     nearby.stop()
+  }
+
+  func setConnectionPreference(_ preference: ConnectionPreference) {
+    let shouldApply = lock.withLock { () -> Bool in
+      self.preference = preference
+      return isStarted
+    }
+    wifi.setConnectionPreference(preference)
+    if shouldApply { applyConnectionPreference() }
   }
 
   func install(_ bootstrap: TransportBootstrap) { wifi.install(bootstrap) }
@@ -51,6 +63,18 @@ final class AdaptiveBridgeClient: @unchecked Sendable {
     if fromWiFi, case .state(.failed) = event { nearby.start() }
     if !fromWiFi, wifi.connected, case .state = event { return }
     lock.withLock { eventHandler }?(event)
+  }
+
+  private func applyConnectionPreference() {
+    let preference = lock.withLock { self.preference }
+    wifi.setConnectionPreference(preference)
+    if preference == .nearbyOnly {
+      wifi.stop()
+      nearby.start()
+    } else {
+      wifi.start()
+      nearby.start()
+    }
   }
 }
 

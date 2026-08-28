@@ -36,6 +36,8 @@ final class WiFiClient: @unchecked Sendable {
   private var bootstrap: TransportBootstrap?
   private var eventHandler: (@Sendable (BridgeClientEvent) -> Void)?
   private var isConnected = false
+  private var connectionPreference = ConnectionPreference.automatic
+  private var wantsConnection = false
 
   let kind = BridgeTransportKind.wifiDirect
 
@@ -61,22 +63,28 @@ final class WiFiClient: @unchecked Sendable {
   }
 
   func start() {
-    let shouldStart = lock.withLock { self.browser == nil && connection == nil }
+    let shouldStart = lock.withLock { () -> Bool in
+      wantsConnection = true
+      return connectionPreference != .nearbyOnly && self.browser == nil && connection == nil
+    }
     guard shouldStart else { return }
     let parameters = NWParameters.tcp
     parameters.includePeerToPeer = true
     let browser = NWBrowser(
       for: .bonjour(type: "_ios-eng-fast._tcp", domain: nil), using: parameters)
     browser.browseResultsChangedHandler = { [weak self] results, _ in
-      guard let self, let result = Self.preferredResult(in: results) else { return }
-      let interface = Self.preferredInterface(in: result)
+      guard let self else { return }
+      let preference = self.lock.withLock { self.connectionPreference }
+      guard let selection = Self.preferredSelection(in: results, preference: preference) else {
+        return
+      }
       let connectionParameters = NWParameters.tcp
       connectionParameters.includePeerToPeer = true
-      connectionParameters.requiredInterface = interface
+      connectionParameters.requiredInterface = selection.interface
       self.connect(
-        to: result.endpoint,
+        to: selection.result.endpoint,
         parameters: connectionParameters,
-        bearer: .classify(interfaceType: interface?.type)
+        bearer: .classify(interfaceType: selection.interface?.type)
       )
     }
     browser.stateUpdateHandler = { [weak self] state in
@@ -92,10 +100,23 @@ final class WiFiClient: @unchecked Sendable {
       browser = nil
       connection = nil
       isConnected = false
+      wantsConnection = false
       return values
     }
     values.0?.cancel()
     values.1?.cancel()
+  }
+
+  func setConnectionPreference(_ preference: ConnectionPreference) {
+    let wasStarted = lock.withLock { () -> Bool in
+      guard connectionPreference != preference else { return false }
+      connectionPreference = preference
+      return wantsConnection
+    }
+    if wasStarted {
+      stop()
+      if preference != .nearbyOnly { start() }
+    }
   }
 
   func send(_ envelope: BridgeEnvelope) throws {
@@ -130,8 +151,9 @@ final class WiFiClient: @unchecked Sendable {
       switch state {
       case .ready:
         self.sendPairingHello(on: connection, bearer: bearer)
-      case .failed(let error): self.disconnected(error.localizedDescription)
-      case .cancelled: self.disconnected(nil)
+      case .failed(let error):
+        self.disconnected(error.localizedDescription, connection: connection)
+      case .cancelled: self.disconnected(nil, connection: connection)
       default: break
       }
     }
@@ -151,11 +173,13 @@ final class WiFiClient: @unchecked Sendable {
       connection.send(
         content: frame,
         completion: .contentProcessed { [weak self] error in
-          if let error { self?.disconnected(error.localizedDescription) }
+          if let error {
+            self?.disconnected(error.localizedDescription, connection: connection)
+          }
         })
       receivePairingResponse(on: connection, buffer: NewlineFrameBuffer(), bearer: bearer)
     } catch {
-      disconnected(error.localizedDescription)
+      disconnected(error.localizedDescription, connection: connection)
     }
   }
 
@@ -172,7 +196,7 @@ final class WiFiClient: @unchecked Sendable {
         let frames = try nextBuffer.append(data ?? Data())
         guard let frame = frames.first else {
           if complete || error != nil {
-            self.disconnected(error?.localizedDescription)
+            self.disconnected(error?.localizedDescription, connection: connection)
           } else {
             self.receivePairingResponse(on: connection, buffer: nextBuffer, bearer: bearer)
           }
@@ -226,22 +250,27 @@ final class WiFiClient: @unchecked Sendable {
         return
       }
       if complete || error != nil {
-        self.disconnected(error?.localizedDescription)
+        self.disconnected(error?.localizedDescription, connection: connection)
         return
       }
       self.receive(on: connection, buffer: nextBuffer)
     }
   }
 
-  private func disconnected(_ reason: String?) {
-    let shouldRestart = lock.withLock { () -> Bool in
+  private func disconnected(_ reason: String?, connection finishedConnection: NWConnection) {
+    let result = lock.withLock { () -> (handled: Bool, shouldRestart: Bool) in
+      guard connection === finishedConnection else { return (false, false) }
       isConnected = false
       connection = nil
-      return true
+      return (true, wantsConnection)
     }
+    guard result.handled else { return }
     emit(.state(reason.map(BridgeConnectionState.failed) ?? .disconnected))
-    if shouldRestart {
-      queue.asyncAfter(deadline: .now() + 0.75) { [weak self] in self?.start() }
+    if result.shouldRestart {
+      queue.asyncAfter(deadline: .now() + 0.75) { [weak self] in
+        guard let self, self.lock.withLock({ self.wantsConnection }) else { return }
+        self.start()
+      }
     }
   }
 
@@ -249,21 +278,33 @@ final class WiFiClient: @unchecked Sendable {
     lock.withLock { eventHandler }?(event)
   }
 
-  private static func preferredResult(
-    in results: Set<NWBrowser.Result>
-  ) -> NWBrowser.Result? {
-    results.sorted { lhs, rhs in
-      let lhsScore = preferredInterface(in: lhs)?.type == .wiredEthernet ? 1 : 0
-      let rhsScore = preferredInterface(in: rhs)?.type == .wiredEthernet ? 1 : 0
+  private static func preferredSelection(
+    in results: Set<NWBrowser.Result>,
+    preference: ConnectionPreference
+  ) -> (result: NWBrowser.Result, interface: NWInterface?)? {
+    guard preference != .nearbyOnly else { return nil }
+    let selections = results.flatMap { result in
+      result.interfaces.map { (result: result, interface: Optional($0)) }
+        + (result.interfaces.isEmpty ? [(result: result, interface: nil)] : [])
+    }
+    return selections.sorted { lhs, rhs in
+      let lhsScore = interfaceScore(lhs.interface?.type, preference: preference)
+      let rhsScore = interfaceScore(rhs.interface?.type, preference: preference)
       if lhsScore != rhsScore { return lhsScore > rhsScore }
-      return String(describing: lhs.endpoint) < String(describing: rhs.endpoint)
+      return String(describing: lhs.result.endpoint) < String(describing: rhs.result.endpoint)
     }.first
   }
 
-  private static func preferredInterface(in result: NWBrowser.Result) -> NWInterface? {
-    result.interfaces.first(where: { $0.type == .wiredEthernet })
-      ?? result.interfaces.first(where: { $0.type == .wifi })
-      ?? result.interfaces.first
+  private static func interfaceScore(
+    _ type: NWInterface.InterfaceType?, preference: ConnectionPreference
+  ) -> Int {
+    switch (preference, type) {
+    case (.preferWiFi, .wifi): 30
+    case (.preferWiFi, .wiredEthernet): 20
+    case (_, .wiredEthernet): 30
+    case (_, .wifi): 20
+    default: 10
+    }
   }
 }
 

@@ -57,6 +57,27 @@ struct ConnectionView: View {
               }
             }
 
+            Win95GroupBox(title: "Data route") {
+              VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                  Text(store.connectionPreference.label)
+                    .font(Win95Font.bold)
+                  Spacer()
+                  Menu("Change…") {
+                    ForEach(ConnectionPreference.allCases) { preference in
+                      Button(preference.label) {
+                        store.connectionPreference = preference
+                      }
+                    }
+                  }
+                  .buttonStyle(Win95ButtonStyle(compact: true))
+                }
+                Text(store.connectionPreference.detail)
+                  .font(Win95Font.small)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+            }
+
             Win95GroupBox(title: "Replacement phone") {
               VStack(alignment: .leading, spacing: 6) {
                 TextField("Optional six-digit code", text: $store.pairingCode)
@@ -124,7 +145,7 @@ struct ConnectionView: View {
         .font(Win95Font.small)
         .foregroundStyle(Win95.lightFace)
       Spacer(minLength: 40)
-      Text("v0.1")
+      Text("v\(appVersion)")
         .font(Win95Font.monoSmall)
         .foregroundStyle(Win95.lightFace)
     }
@@ -140,6 +161,10 @@ struct ConnectionView: View {
     )
     .padding(.leading, 2)
     .padding(.top, 2)
+  }
+
+  private var appVersion: String {
+    Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
   }
 
   private var statusLEDColor: Color {

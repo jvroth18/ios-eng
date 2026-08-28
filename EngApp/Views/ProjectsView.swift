@@ -26,8 +26,9 @@ struct ProjectsView: View {
       }
 
       Win95StatusBar(items: [
-        "\(store.projects.count) projects",
+        "\(visibleProjects.count) shown",
         "\(allThreads.count) threads",
+        "\(store.pinnedProjectCount) pinned",
         "\(liveThreads.count) live",
       ])
 
@@ -42,8 +43,10 @@ struct ProjectsView: View {
                 threads: entry.threads,
                 collapsed: collapsedProjects.contains(entry.project.id),
                 showsAll: expandedProjects.contains(entry.project.id) || !query.isEmpty,
+                pinned: store.isProjectPinned(entry.project.id),
                 onToggleCollapse: { toggle(entry.project.id, in: &collapsedProjects) },
-                onToggleShowAll: { toggle(entry.project.id, in: &expandedProjects) }
+                onToggleShowAll: { toggle(entry.project.id, in: &expandedProjects) },
+                onTogglePin: { store.toggleProjectPin(entry.project.id) }
               )
             }
           }
@@ -89,6 +92,7 @@ struct ProjectsView: View {
     let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     return
       store.projects
+      .filter { !store.focusPinnedOnly || store.isProjectPinned($0.id) }
       .compactMap { project -> ProjectEntry? in
         var threads = project.threads
         if activeOnly {
@@ -108,7 +112,12 @@ struct ProjectsView: View {
         let sorted = threads.sorted { $0.updatedAt > $1.updatedAt }
         return ProjectEntry(project: project, threads: sorted)
       }
-      .sorted { $0.latestActivity > $1.latestActivity }
+      .sorted {
+        let lhsPinned = store.isProjectPinned($0.id)
+        let rhsPinned = store.isProjectPinned($1.id)
+        if lhsPinned != rhsPinned { return lhsPinned && !rhsPinned }
+        return $0.latestActivity > $1.latestActivity
+      }
   }
 
   private func toggle(_ id: String, in set: inout Set<String>) {
@@ -131,8 +140,10 @@ private struct ProjectNode: View {
   let threads: [ThreadSummary]
   let collapsed: Bool
   let showsAll: Bool
+  let pinned: Bool
   let onToggleCollapse: () -> Void
   let onToggleShowAll: () -> Void
+  let onTogglePin: () -> Void
 
   private var visibleThreads: ArraySlice<ThreadSummary> {
     showsAll ? threads[...] : threads.prefix(ProjectsView.previewThreadLimit)
@@ -142,31 +153,43 @@ private struct ProjectNode: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      Button(action: onToggleCollapse) {
-        HStack(spacing: 6) {
-          TreeExpander(expanded: !collapsed)
-          Image(systemName: "folder.fill")
-            .font(.system(size: 13))
-            .foregroundStyle(Win95.folder)
-            .overlay(Image(systemName: "folder").font(.system(size: 13)).foregroundStyle(.black))
-          Text(project.name)
-            .font(Win95Font.bold)
-          Text(project.repositoryRoot)
-            .font(Win95Font.monoSmall)
-            .lineLimit(1)
-            .truncationMode(.head)
-            .opacity(0.7)
-          Spacer(minLength: 4)
-          if project.activeThreadCount > 0 {
-            Text("\(project.activeThreadCount) active")
-              .font(Win95Font.smallBold)
+      HStack(spacing: 3) {
+        Button(action: onToggleCollapse) {
+          HStack(spacing: 6) {
+            TreeExpander(expanded: !collapsed)
+            Image(systemName: "folder.fill")
+              .font(.system(size: 13))
+              .foregroundStyle(Win95.folder)
+              .overlay(Image(systemName: "folder").font(.system(size: 13)).foregroundStyle(.black))
+            Text(project.name)
+              .font(Win95Font.bold)
+            Text(project.repositoryRoot)
+              .font(Win95Font.monoSmall)
+              .lineLimit(1)
+              .truncationMode(.head)
+              .opacity(0.7)
+            Spacer(minLength: 4)
+            if project.activeThreadCount > 0 {
+              Text("\(project.activeThreadCount) active")
+                .font(Win95Font.smallBold)
+            }
           }
+          .padding(.leading, 6)
+          .padding(.vertical, 4)
+          .contentShape(Rectangle())
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
+        .buttonStyle(Win95RowStyle())
+
+        Button(action: onTogglePin) {
+          Image(systemName: pinned ? "pin.fill" : "pin")
+            .font(.system(size: 12, weight: .bold))
+            .frame(width: 28, height: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(Win95RowStyle())
+        .accessibilityLabel(pinned ? "Unpin \(project.name)" : "Pin \(project.name)")
       }
-      .buttonStyle(Win95RowStyle())
+      .padding(.trailing, 3)
 
       if !collapsed {
         ForEach(visibleThreads) { thread in
@@ -203,6 +226,7 @@ private struct ProjectNode: View {
 }
 
 private struct ThreadRow: View {
+  @EnvironmentObject private var store: BridgeStore
   let thread: ThreadSummary
 
   var body: some View {
@@ -213,8 +237,17 @@ private struct ThreadRow: View {
         .font(.system(size: 12))
       VStack(alignment: .leading, spacing: 1) {
         Text(thread.title)
-          .font(Win95Font.body)
+          .font(Win95Font.bold)
           .lineLimit(1)
+        if !thread.preview.isEmpty {
+          Text(
+            store.currentActivitySummary(for: thread)
+              ?? "\(thread.activityPrefix): \(thread.preview)"
+          )
+          .font(Win95Font.small)
+          .lineLimit(2)
+          .fixedSize(horizontal: false, vertical: true)
+        }
         HStack(spacing: 4) {
           Image(systemName: thread.controlLevel.presentationSymbol)
             .font(.system(size: 9))
@@ -222,6 +255,11 @@ private struct ThreadRow: View {
           Text("·")
           Text(thread.status.presentationLabel)
           Text("·")
+          if thread.status == .active {
+            Text("Live now")
+            Text("·")
+          }
+          Text("Updated")
           Text(thread.updatedAt, style: .relative)
         }
         .font(Win95Font.small)
@@ -238,8 +276,20 @@ private struct ThreadRow: View {
     }
     .padding(.leading, 22)
     .padding(.trailing, 6)
-    .padding(.vertical, 4)
+    .padding(.vertical, 5)
     .contentShape(Rectangle())
+  }
+}
+
+extension ThreadSummary {
+  fileprivate var activityPrefix: String {
+    switch status {
+    case .active: "Current request"
+    case .waiting: "Waiting for you"
+    case .idle: "Last activity"
+    case .notLoaded: "Saved context"
+    case .systemError: "Diagnostic"
+    }
   }
 }
 

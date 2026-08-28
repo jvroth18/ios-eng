@@ -11,8 +11,10 @@ final class FakeBridgeClient: BridgeClientTransport, @unchecked Sendable {
   private let lock = NSLock()
   private var handler: (@Sendable (BridgeClientEvent) -> Void)?
   private var outbound: [BridgeEnvelope] = []
+  private var preferences: [ConnectionPreference] = []
 
   var sent: [BridgeMessage] { lock.withLock { outbound.map(\.message) } }
+  var appliedPreferences: [ConnectionPreference] { lock.withLock { preferences } }
 
   init(identityPublicKey: Data? = nil) {
     self.identityPublicKey = identityPublicKey
@@ -25,6 +27,9 @@ final class FakeBridgeClient: BridgeClientTransport, @unchecked Sendable {
   func stop() {}
   func send(_ envelope: BridgeEnvelope) throws {
     lock.withLock { outbound.append(envelope) }
+  }
+  func setConnectionPreference(_ preference: ConnectionPreference) {
+    lock.withLock { preferences.append(preference) }
   }
 
   func emit(_ event: BridgeClientEvent) {
@@ -49,6 +54,34 @@ struct BridgeStoreTests {
     #expect(store.activePathLabel == "USB-C / Wired")
   }
 
+  @Test func connectionPreferenceIsAppliedAndPersisted() {
+    let defaults = Self.isolatedPreferences()
+    let firstClient = FakeBridgeClient()
+    let first = BridgeStore(client: firstClient, arguments: [], preferences: defaults)
+
+    first.connectionPreference = .preferWiFi
+
+    #expect(firstClient.appliedPreferences.last == .preferWiFi)
+    let secondClient = FakeBridgeClient()
+    let second = BridgeStore(client: secondClient, arguments: [], preferences: defaults)
+    #expect(second.connectionPreference == .preferWiFi)
+    #expect(secondClient.appliedPreferences.last == .preferWiFi)
+  }
+
+  @Test func folderPinsAndPinnedOnlyFocusPersist() {
+    let defaults = Self.isolatedPreferences()
+    let first = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
+
+    first.toggleProjectPin("ios-eng")
+    first.focusPinnedOnly = true
+
+    let second = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
+    #expect(second.isProjectPinned("ios-eng"))
+    #expect(second.focusPinnedOnly)
+    second.toggleProjectPin("ios-eng")
+    #expect(!second.isProjectPinned("ios-eng"))
+  }
+
   private static func thread(_ id: String) -> ThreadSummary {
     ThreadSummary(
       id: id, title: "Thread \(id)", preview: "", cwd: "/tmp/\(id)", repositoryRoot: "/tmp/\(id)",
@@ -67,8 +100,15 @@ struct BridgeStoreTests {
 
   private static func makeStore() -> (BridgeStore, FakeBridgeClient) {
     let client = FakeBridgeClient()
-    let store = BridgeStore(client: client, arguments: [])
+    let store = BridgeStore(client: client, arguments: [], preferences: isolatedPreferences())
     return (store, client)
+  }
+
+  private static func isolatedPreferences() -> UserDefaults {
+    let name = "BridgeStoreTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: name)!
+    defaults.removePersistentDomain(forName: name)
+    return defaults
   }
 
   private static func pair(_ store: BridgeStore) {
@@ -89,6 +129,18 @@ struct BridgeStoreTests {
     #expect(timeline.first?.id == "a1")
     #expect(timeline.first?.body == "Hello, world")
     #expect(timeline.first?.state == .running)
+  }
+
+  @Test func selectedThreadActivityBecomesItsLiveProjectSummary() {
+    let (store, _) = Self.makeStore()
+    let thread = Self.thread("t1")
+    let command = Self.item("c1", kind: .command, body: "Running tests")
+
+    store.receive(
+      BridgeEnvelope(
+        message: .threadDetail(ThreadDetail(thread: thread, timeline: [command]))))
+
+    #expect(store.currentActivitySummary(for: thread) == "Running command: Codex")
   }
 
   @Test func completedItemReplacesItsRunningVersionById() {
@@ -258,7 +310,9 @@ struct BridgeStoreTests {
 
   @Test func debugAutomaticPairingDoesNotFirstSendAnEmptyTrustedCode() async {
     let client = FakeBridgeClient()
-    let store = BridgeStore(client: client, arguments: ["-eng-pair-code", "123456"])
+    let store = BridgeStore(
+      client: client, arguments: ["-eng-pair-code", "123456"],
+      preferences: Self.isolatedPreferences())
     client.emit(.state(.connected("Mac")))
     await Task.yield()
 
@@ -273,7 +327,7 @@ struct BridgeStoreTests {
   @Test func trustedReconnectCarriesTheTransportIdentityKey() async {
     let identityKey = Data(repeating: 0x5A, count: 32)
     let client = FakeBridgeClient(identityPublicKey: identityKey)
-    let store = BridgeStore(client: client, arguments: [])
+    let store = BridgeStore(client: client, arguments: [], preferences: Self.isolatedPreferences())
     client.emit(.state(.connected("Mac")))
     await Task.yield()
 

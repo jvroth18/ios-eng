@@ -42,11 +42,23 @@ final class BridgeStore: ObservableObject {
   @Published private(set) var phoneHistory: [AnalyticsPoint] = []
   @Published private(set) var macHistory: [AnalyticsPoint] = []
   @Published private(set) var isSending = false
+  @Published private(set) var activitySummaries: [String: String] = [:]
+  @Published private(set) var pinnedProjectIDs: Set<String>
+  @Published var focusPinnedOnly: Bool {
+    didSet { preferences.set(focusPinnedOnly, forKey: PreferenceKey.focusPinnedOnly) }
+  }
+  @Published var connectionPreference: ConnectionPreference {
+    didSet {
+      preferences.set(connectionPreference.rawValue, forKey: PreferenceKey.connectionPreference)
+      client.setConnectionPreference(connectionPreference)
+    }
+  }
   @Published var pairingCode = ""
   @Published var presentedError: BridgeError?
 
   private let deviceID: UUID
   private let client: any BridgeClientTransport
+  private let preferences: UserDefaults
   private let telemetrySampler = PhoneTelemetrySampler()
   private let demoMode: Bool
   private let automaticPairingCode: String?
@@ -71,7 +83,16 @@ final class BridgeStore: ObservableObject {
 
   /// `client` defaults to the adaptive direct-local/Nearby transport. Tests inject a fake
   /// so store logic (paging, timeline merging, link probes) runs without radios.
-  init(client: (any BridgeClientTransport)?, arguments: [String]) {
+  init(
+    client: (any BridgeClientTransport)?, arguments: [String],
+    preferences: UserDefaults = .standard
+  ) {
+    self.preferences = preferences
+    pinnedProjectIDs = Set(preferences.stringArray(forKey: PreferenceKey.pinnedProjectIDs) ?? [])
+    focusPinnedOnly = preferences.bool(forKey: PreferenceKey.focusPinnedOnly)
+    connectionPreference =
+      preferences.string(forKey: PreferenceKey.connectionPreference)
+      .flatMap(ConnectionPreference.init(rawValue:)) ?? .automatic
     demoMode = arguments.contains("-eng-demo")
     if let index = arguments.firstIndex(of: "-eng-pair-code"),
       arguments.indices.contains(index + 1)
@@ -80,7 +101,7 @@ final class BridgeStore: ObservableObject {
     } else {
       automaticPairingCode = nil
     }
-    deviceID = Self.loadDeviceID()
+    deviceID = Self.loadDeviceID(from: preferences)
     self.client =
       client
       ?? AdaptiveBridgeClient(displayName: UIDevice.current.name, deviceID: deviceID)
@@ -89,6 +110,7 @@ final class BridgeStore: ObservableObject {
         self?.handle(event)
       }
     }
+    self.client.setConnectionPreference(connectionPreference)
     if demoMode { applyDemoState() }
   }
 
@@ -98,6 +120,10 @@ final class BridgeStore: ObservableObject {
   }
 
   var projects: [ProjectSummary] { workspace?.projects ?? [] }
+
+  var pinnedProjectCount: Int {
+    projects.lazy.filter { self.pinnedProjectIDs.contains($0.id) }.count
+  }
 
   var isConnected: Bool {
     if case .connected = connection { return true }
@@ -169,6 +195,24 @@ final class BridgeStore: ObservableObject {
     send(.refresh(RefreshRequest(threadID: threadID)))
   }
 
+  func isProjectPinned(_ projectID: String) -> Bool {
+    pinnedProjectIDs.contains(projectID)
+  }
+
+  func currentActivitySummary(for thread: ThreadSummary) -> String? {
+    guard thread.status == .active || thread.status == .waiting else { return nil }
+    return activitySummaries[thread.id]
+  }
+
+  func toggleProjectPin(_ projectID: String) {
+    if pinnedProjectIDs.contains(projectID) {
+      pinnedProjectIDs.remove(projectID)
+    } else {
+      pinnedProjectIDs.insert(projectID)
+    }
+    preferences.set(Array(pinnedProjectIDs).sorted(), forKey: PreferenceKey.pinnedProjectIDs)
+  }
+
   func subscribe(to thread: ThreadSummary) {
     if demoMode {
       #if DEBUG
@@ -196,6 +240,7 @@ final class BridgeStore: ObservableObject {
     )
     optimisticMessages[threadID, default: []].append(optimistic)
     appendOptimistic(optimistic)
+    activitySummaries[threadID] = "Thinking"
     isSending = true
     if !send(.sendMessage(SendMessageRequest(threadID: threadID, text: normalized))) {
       markLatestOptimisticMessageFailed(threadID: threadID)
@@ -295,7 +340,9 @@ final class BridgeStore: ObservableObject {
     case .workspacePage(let page):
       receive(page)
     case .threadDetail(let detail):
-      threadDetail = reconcileOptimisticMessages(in: detail)
+      let reconciled = reconcileOptimisticMessages(in: detail)
+      threadDetail = reconciled
+      rememberActivity(in: reconciled)
       isSending = false
     case .timelineEvent(let item):
       mergeTimelineEvent(item)
@@ -379,6 +426,23 @@ final class BridgeStore: ObservableObject {
       refreshedAt: Date()
     )
     threadDetail = detail
+    rememberActivity(in: detail)
+  }
+
+  private func rememberActivity(in detail: ThreadDetail) {
+    guard
+      let activity = ThreadActivityPresentation.current(
+        thread: detail.thread,
+        timeline: detail.timeline,
+        pendingActions: detail.pendingActions,
+        isSending: isSending
+      )
+    else {
+      activitySummaries.removeValue(forKey: detail.thread.id)
+      return
+    }
+    activitySummaries[detail.thread.id] =
+      [activity.title, activity.detail].compactMap { $0 }.joined(separator: ": ")
   }
 
   private func appendOptimistic(_ item: TimelineItem) {
@@ -565,16 +629,22 @@ final class BridgeStore: ObservableObject {
     }
   }
 
-  private static func loadDeviceID() -> UUID {
+  private static func loadDeviceID(from preferences: UserDefaults) -> UUID {
     let key = "eng.device-id"
-    if let value = UserDefaults.standard.string(forKey: key),
+    if let value = preferences.string(forKey: key),
       let id = UUID(uuidString: value)
     {
       return id
     }
     let id = UUID()
-    UserDefaults.standard.set(id.uuidString, forKey: key)
+    preferences.set(id.uuidString, forKey: key)
     return id
+  }
+
+  private enum PreferenceKey {
+    static let pinnedProjectIDs = "eng.pinned-project-ids"
+    static let focusPinnedOnly = "eng.focus-pinned-only"
+    static let connectionPreference = "eng.connection-preference"
   }
 
   private func applyDemoState() {

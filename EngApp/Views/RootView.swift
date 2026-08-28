@@ -54,6 +54,7 @@ struct RootView: View {
           tabs: [
             Win95Tab(id: EngTab.projects, label: "Projects"),
             Win95Tab(id: EngTab.analytics, label: "Analytics"),
+            Win95Tab(id: EngTab.config, label: "Config"),
           ],
           selection: $selectedTab
         )
@@ -64,6 +65,7 @@ struct RootView: View {
           switch selectedTab {
           case .projects: ProjectsView()
           case .analytics: AnalyticsView()
+          case .config: ConfigView()
           }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -88,4 +90,5 @@ struct RootView: View {
 private enum EngTab: Hashable {
   case projects
   case analytics
+  case config
 }
