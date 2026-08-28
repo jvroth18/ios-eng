@@ -15,6 +15,7 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - A Release `iphoneos` build succeeds with Apple Development signing and automatic provisioning for bundle `dev.jvroth.eng`.
 - The last installed Release artifact before the active-writer repair was `Eng` version `0.2.0` (build `2`).
 - The configuration release `Eng` version `0.4.0` (build `4`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as a live `/Eng.app/Eng` process.
+- The oversized-thread repair release `Eng` version `0.4.1` (build `5`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back at its new `/Eng.app/Eng` installation path.
 - `devicectl` launches the installed bundle and reads back its live `/Eng.app/Eng` process.
 
 ## August 28 Codex activity mirror
@@ -41,6 +42,9 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - Historical `thread/turns/list` requests now use the installed App Server's supported `summary` items view. The loopback Mac client has an explicit 16 MB guarded receive ceiling for legitimate live events, and every mapped live timeline event is projected before phone transport.
 - Workspace refresh preserves the existing project order and each project's existing thread order while applying current status, summary, timestamps, and control state. New entries appear once and removed entries disappear; routine five-second refreshes no longer reshuffle the visible list.
 - Regression tests assert the summary request and stable ordering across status/time changes, additions, and removals. Core tests pass 43 tests in 14 suites and the iPhone simulator passes 22 tests in 3 suites.
+- A live initialized App Server probe requested the exact formerly failing thread `01a0443a-e741-70f2-8738-760a9a5d4332` with `itemsView: summary` and received all 12 requested turn summaries without disconnecting.
+- Desktop companion 3.8 (build 11) was installed with an embedded bridge hash matching the tested release binary. Its fresh App Server on port 54496 returned HTTP 200 from `/readyz` and `/healthz`.
+- Eng 0.4.1 reconnected from the physical iPhone over the encrypted direct-local route, received all 912 threads in 10 bounded frames, and reported nominal thermal state. The post-launch log window contained one App Server connection, no `Message too long`, and no bridge-operation failure or reconnect loop.
 
 ## August 28 phone configuration and focus
 
