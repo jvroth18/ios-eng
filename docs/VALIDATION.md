@@ -16,7 +16,7 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - The last installed Release artifact before the active-writer repair was `Eng` version `0.2.0` (build `2`).
 - The configuration release `Eng` version `0.4.0` (build `4`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as a live `/Eng.app/Eng` process.
 - The oversized-thread repair release `Eng` version `0.4.1` (build `5`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back at its new `/Eng.app/Eng` installation path.
-- The live-activity release candidate is `Eng` version `0.5.0` (build `6`).
+- The live-activity release `Eng` version `0.5.0` (build `6`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as the live `/Eng.app/Eng` process.
 - `devicectl` launches the installed bundle and reads back its live `/Eng.app/Eng` process.
 
 ## August 28 Codex activity mirror
@@ -45,6 +45,9 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - Structured notification coverage includes plans, commands and terminal interaction, file patch deltas, MCP and dynamic tools, collaboration/subagent activity, web search, image view/generation, sleep, review mode, hooks, diffs, and context compaction.
 - The external-thread reader resolves the exact thread UUID, initially tails no more than 4 MB, consumes only appended bytes afterward, and retains 120 projected items. Privacy tests reject session metadata, raw response records, encrypted reasoning, other-thread records, and unknown record types.
 - Core coverage passes 49 tests in 15 suites. The iPhone simulator passes 25 tests with 0 failures.
+- Desktop companion 3.9 (build 12) was installed with an embedded bridge SHA-256 matching the tested release binary. The canonical app launched a fresh bridge-owned App Server on port 60388, and both `/readyz` and `/healthz` returned HTTP 200.
+- Eng 0.5.0 reconnected from the physical iPhone over the encrypted direct-local route and received 912 threads across 170 projects in 10 bounded frames. The scoped launch log contained one App Server connection and no `Message too long`, not-connected error, bridge failure, or reconnect loop.
+- Before deployment, the prior desktop app was stopped and its current process tree exited. A separately confirmed orphaned listener from an older restart on port 54496 was terminated by its exact process identifiers; unrelated ChatGPT App Server processes were not touched. The replaced 3.8 app remains recoverable as `Amphetamine Switch 3.8 pre-3.9.app`.
 
 ## August 28 oversized-thread and stable-order repair
 
