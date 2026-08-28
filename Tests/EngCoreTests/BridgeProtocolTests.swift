@@ -4,6 +4,43 @@ import Testing
 @testable import EngCore
 
 struct BridgeProtocolTests {
+  @Test func secureTransportRoundTripsAndRejectsTampering() throws {
+    let now = Date(timeIntervalSince1970: 1_787_000_000)
+    let credential = try TransportBootstrap.generate(
+      deviceID: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+      validFor: 600,
+      now: now
+    )
+    let envelope = BridgeEnvelope(
+      id: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
+      sentAt: now,
+      message: .refresh(RefreshRequest(threadID: "thread-secure"))
+    )
+    let packet = try SecureTransportCodec.seal(envelope, using: credential, now: now)
+    #expect(try SecureTransportCodec.open(packet, using: credential, now: now) == envelope)
+
+    var tampered = packet
+    tampered[tampered.index(before: tampered.endIndex)] ^= 1
+    #expect(throws: (any Error).self) {
+      try SecureTransportCodec.open(tampered, using: credential, now: now)
+    }
+  }
+
+  @Test func secureTransportRejectsExpiredAndWrongDeviceCredentials() throws {
+    let now = Date(timeIntervalSince1970: 1_787_000_000)
+    let first = try TransportBootstrap.generate(deviceID: UUID(), validFor: 10, now: now)
+    let second = try TransportBootstrap.generate(deviceID: UUID(), validFor: 10, now: now)
+    let envelope = BridgeEnvelope(sentAt: now, message: .refresh(RefreshRequest()))
+    let packet = try SecureTransportCodec.seal(envelope, using: first, now: now)
+
+    #expect(throws: SecureTransportError.expiredCredential) {
+      try SecureTransportCodec.open(packet, using: first, now: now.addingTimeInterval(11))
+    }
+    #expect(throws: SecureTransportError.invalidPacket) {
+      try SecureTransportCodec.open(packet, using: second, now: now)
+    }
+  }
+
   @Test func workspaceSnapshotRoundTripsWithStableEnvelopeShape() throws {
     let now = Date(timeIntervalSince1970: 1_787_000_000)
     let thread = ThreadSummary(

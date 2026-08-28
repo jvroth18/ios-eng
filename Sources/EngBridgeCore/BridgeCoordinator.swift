@@ -10,6 +10,7 @@ public actor BridgeCoordinator {
   private var pairingGate: PairingGate
   private var pairedPeers = Set<String>()
   private var peerDevices: [String: UUID] = [:]
+  private var transportCredentials: [UUID: TransportBootstrap] = [:]
   private var subscriptions: [String: String] = [:]
   private var phoneAnalytics: [String: AnalyticsSnapshot] = [:]
   private var reportedPhoneTelemetryPeers = Set<String>()
@@ -106,6 +107,12 @@ public actor BridgeCoordinator {
         statusHandler(
           "Paired \(request.deviceName) over \(transport.kind.title) (\(transport.kind.securityLabel))."
         )
+        if let credential = try? transportCredential(for: request.deviceID) {
+          try? transport.send(
+            BridgeEnvelope(message: .transportBootstrap(credential)),
+            to: peer
+          )
+        }
         await sendInitialState(to: peer)
       } else {
         statusHandler("Pairing rejected for \(request.deviceName): \(result.reason ?? "unknown")")
@@ -175,8 +182,8 @@ public actor BridgeCoordinator {
           payloadBytes: ping.payloadBytes
         )
         try transport.send(BridgeEnvelope(message: .pong(pong)), to: peer)
-      case .clientHello, .pair, .pairResult, .workspaceSnapshot, .workspacePage, .threadDetail,
-        .timelineEvent, .pong, .error:
+      case .clientHello, .pair, .pairResult, .transportBootstrap, .workspaceSnapshot,
+        .workspacePage, .threadDetail, .timelineEvent, .pong, .error:
         break
       }
     } catch {
@@ -190,6 +197,13 @@ public actor BridgeCoordinator {
         to: peer
       )
     }
+  }
+
+  private func transportCredential(for deviceID: UUID) throws -> TransportBootstrap {
+    if let current = transportCredentials[deviceID], current.isValid() { return current }
+    let credential = try TransportBootstrap.generate(deviceID: deviceID)
+    transportCredentials[deviceID] = credential
+    return credential
   }
 
   private func refreshNow(forceBroadcast: Bool = false) async {

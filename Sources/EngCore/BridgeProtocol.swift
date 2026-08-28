@@ -1,7 +1,7 @@
 import Foundation
 
 public struct BridgeEnvelope: Codable, Equatable, Sendable, Identifiable {
-  public static let currentProtocolVersion = 3
+  public static let currentProtocolVersion = 4
 
   public let id: UUID
   public let sentAt: Date
@@ -18,6 +18,7 @@ public enum BridgeMessage: Equatable, Sendable {
   case clientHello(ClientHello)
   case pair(PairRequest)
   case pairResult(PairResult)
+  case transportBootstrap(TransportBootstrap)
   case refresh(RefreshRequest)
   case subscribe(ThreadSubscription)
   case workspaceSnapshot(WorkspaceSnapshot)
@@ -44,6 +45,7 @@ extension BridgeMessage: Codable {
     case clientHello
     case pair
     case pairResult
+    case transportBootstrap
     case refresh
     case subscribe
     case workspaceSnapshot
@@ -69,6 +71,8 @@ extension BridgeMessage: Codable {
       self = .pair(try container.decode(PairRequest.self, forKey: .payload))
     case .pairResult:
       self = .pairResult(try container.decode(PairResult.self, forKey: .payload))
+    case .transportBootstrap:
+      self = .transportBootstrap(try container.decode(TransportBootstrap.self, forKey: .payload))
     case .refresh:
       self = .refresh(try container.decode(RefreshRequest.self, forKey: .payload))
     case .subscribe:
@@ -111,6 +115,9 @@ extension BridgeMessage: Codable {
       try container.encode(payload, forKey: .payload)
     case .pairResult(let payload):
       try container.encode(Kind.pairResult, forKey: .kind)
+      try container.encode(payload, forKey: .payload)
+    case .transportBootstrap(let payload):
+      try container.encode(Kind.transportBootstrap, forKey: .kind)
       try container.encode(payload, forKey: .payload)
     case .refresh(let payload):
       try container.encode(Kind.refresh, forKey: .kind)

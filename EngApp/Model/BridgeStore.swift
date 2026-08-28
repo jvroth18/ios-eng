@@ -55,6 +55,7 @@ final class BridgeStore: ObservableObject {
   private var pingSequence: UInt64 = 0
   private var pendingPings: [UInt64: Date] = [:]
   private var latestPhoneSample: PhoneTelemetrySample?
+  private var secureTransportBootstrap: TransportBootstrap?
   private var pendingWorkspaceID: UUID?
   private var pendingWorkspacePages: [Int: WorkspacePage] = [:]
 
@@ -228,6 +229,9 @@ final class BridgeStore: ObservableObject {
           relatedMessageID: envelope.id
         )
       }
+    case .transportBootstrap(let bootstrap):
+      guard bootstrap.deviceID == deviceID, bootstrap.isValid() else { return }
+      secureTransportBootstrap = bootstrap
     case .workspaceSnapshot(let snapshot):
       workspace = snapshot
       pendingWorkspaceID = nil
