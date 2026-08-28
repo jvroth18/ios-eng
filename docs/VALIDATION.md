@@ -5,16 +5,25 @@ Validated on August 27, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 ## Contracts and unit coverage
 
 - `swift format lint --strict` passes across app, bridge, shared sources, tests, and scripts.
-- `swift test` passes 31 tests in 9 suites.
+- `swift test` passes 35 tests in 11 suites.
 - Coverage includes protocol round trips, encrypted-pairing gates, Git-root grouping, App Server event and request mapping, public Mac telemetry, link classification, a real 64 KB probe payload, lossless workspace paging, App Server supervision, subscription recovery, active-turn steering, idle existing-thread turns, and the phone command allowlist.
 - The paging stress fixture carries 245 threads, keeps every encoded frame below the Multipeer Connectivity resource ceiling, and reassembles without loss.
 
 ## Native app build and installation
 
-- Xcode simulator tests pass 10 tests with 0 failures on iPhone 17 Pro.
+- Xcode simulator tests pass 17 tests with 0 failures on iPhone 17 Pro.
 - A Release `iphoneos` build succeeds with Apple Development signing and automatic provisioning for bundle `dev.jvroth.eng`.
-- The exact Release artifact installs on the paired physical iPhone as `Eng` version `0.1.0` (build `1`).
+- The exact Release artifact installs on the paired physical iPhone as `Eng` version `0.2.0` (build `2`).
 - `devicectl` launches the installed bundle and reads back its live `/Eng.app/Eng` process.
+
+## August 28 Codex activity mirror
+
+- A phone-sent message is inserted into the selected thread immediately as a pending `You` timeline item, before the bridge acknowledges the request.
+- The pending item is reconciled against the corresponding App Server user event or refreshed thread detail so the confirmed message does not appear twice.
+- Synchronous transport failures preserve the user's text in the timeline and mark it `Failed` instead of silently removing it.
+- The thread surface shows `Thinking` as soon as a message is sent, then derives `Writing response`, `Updating plan`, `Running command`, `Editing files`, `Using tool`, or approval/input waiting states from the actual streamed App Server timeline.
+- The activity mirror presents observable Codex operations only; it does not fabricate or expose private chain-of-thought.
+- After installing and launching version `0.2.0` (build `2`) on the physical iPhone, the bridge recorded a fresh encrypted Nearby pairing, Wi-Fi phone diagnostics, and a measured 172.2 ms / 0.76 MB/s link sample. Both `/readyz` and `/healthz` returned HTTP 200, and the post-launch log window contained no App Server connection error.
 
 ## Live Codex mirror
 
