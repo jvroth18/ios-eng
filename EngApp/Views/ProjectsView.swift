@@ -29,6 +29,7 @@ struct ProjectsView: View {
       Win95StatusBar(items: [
         "\(visibleProjects.count) shown",
         "\(allThreads.count) threads",
+        "\(store.unreadCount) unread",
         "\(store.pinnedProjectCount) pinned",
         "\(liveThreads.count) live",
       ])
@@ -139,6 +140,7 @@ private struct ProjectEntry: Identifiable {
 }
 
 private struct ProjectNode: View {
+  @EnvironmentObject private var store: BridgeStore
   let project: ProjectSummary
   let threads: [ThreadSummary]
   let collapsed: Bool
@@ -176,6 +178,12 @@ private struct ProjectNode: View {
             if project.activeThreadCount > 0 {
               Text("\(project.activeThreadCount) active")
                 .font(Win95Font.smallBold)
+            }
+            let unread = store.unreadCount(in: threads)
+            if unread > 0 {
+              Text("\(unread) unread")
+                .font(Win95Font.smallBold)
+                .foregroundStyle(Win95.highlight)
             }
           }
           .padding(.leading, 6)
@@ -276,6 +284,15 @@ private struct ThreadRow: View {
           .symbolRenderingMode(.palette)
           .foregroundStyle(.black, Win95.warning)
           .font(.system(size: 13))
+      }
+      if store.isThreadUnread(thread.id) {
+        Text("NEW")
+          .font(Win95Font.smallBold)
+          .foregroundStyle(Win95.highlightText)
+          .padding(.horizontal, 5)
+          .padding(.vertical, 2)
+          .background(Win95.highlight)
+          .accessibilityLabel("Unread")
       }
     }
     .padding(.leading, 22)

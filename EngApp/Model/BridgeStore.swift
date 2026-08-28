@@ -27,6 +27,14 @@ struct AnalyticsPoint: Identifiable, Equatable, Sendable {
   }
 }
 
+struct ThreadUnreadNotification: Identifiable, Equatable, Sendable {
+  let threadID: String
+  let title: String
+  let detail: String
+
+  var id: String { threadID }
+}
+
 @MainActor
 final class BridgeStore: ObservableObject {
   @Published private(set) var connection: BridgeConnectionState = .searching
@@ -44,6 +52,8 @@ final class BridgeStore: ObservableObject {
   @Published private(set) var isSending = false
   @Published private(set) var activitySummaries: [String: String] = [:]
   @Published private(set) var pinnedProjectIDs: Set<String>
+  @Published private(set) var unreadThreadIDs: Set<String>
+  @Published private(set) var unreadNotification: ThreadUnreadNotification?
   @Published var focusPinnedOnly: Bool {
     didSet { preferences.set(focusPinnedOnly, forKey: PreferenceKey.focusPinnedOnly) }
   }
@@ -70,6 +80,8 @@ final class BridgeStore: ObservableObject {
   private var latestPhoneSample: PhoneTelemetrySample?
   private var secureTransportBootstrap: TransportBootstrap?
   private var selectedThreadID: String?
+  private var visibleThreadID: String?
+  private var observedThreadUpdates: [String: TimeInterval]
   private var pendingWorkspaceID: UUID?
   /// True while an automatic empty-code pair probe is outstanding; a rejection of that
   /// probe is expected on first pairing and must not surface as an error.
@@ -89,6 +101,10 @@ final class BridgeStore: ObservableObject {
   ) {
     self.preferences = preferences
     pinnedProjectIDs = Set(preferences.stringArray(forKey: PreferenceKey.pinnedProjectIDs) ?? [])
+    unreadThreadIDs = Set(preferences.stringArray(forKey: PreferenceKey.unreadThreadIDs) ?? [])
+    observedThreadUpdates =
+      preferences.dictionary(forKey: PreferenceKey.observedThreadUpdates) as? [String: Double]
+      ?? [:]
     focusPinnedOnly = preferences.bool(forKey: PreferenceKey.focusPinnedOnly)
     connectionPreference =
       preferences.string(forKey: PreferenceKey.connectionPreference)
@@ -124,6 +140,8 @@ final class BridgeStore: ObservableObject {
   var pinnedProjectCount: Int {
     projects.lazy.filter { self.pinnedProjectIDs.contains($0.id) }.count
   }
+
+  var unreadCount: Int { unreadThreadIDs.count }
 
   var isConnected: Bool {
     if case .connected = connection { return true }
@@ -199,6 +217,14 @@ final class BridgeStore: ObservableObject {
     pinnedProjectIDs.contains(projectID)
   }
 
+  func isThreadUnread(_ threadID: String) -> Bool {
+    unreadThreadIDs.contains(threadID)
+  }
+
+  func unreadCount(in threads: [ThreadSummary]) -> Int {
+    threads.lazy.filter { self.unreadThreadIDs.contains($0.id) }.count
+  }
+
   func currentActivitySummary(for thread: ThreadSummary) -> String? {
     guard thread.status == .active || thread.status == .waiting else { return nil }
     return activitySummaries[thread.id]
@@ -214,6 +240,8 @@ final class BridgeStore: ObservableObject {
   }
 
   func subscribe(to thread: ThreadSummary) {
+    visibleThreadID = thread.id
+    markThreadRead(thread.id)
     if demoMode {
       #if DEBUG
         threadDetail = DemoFixtures.threadDetail
@@ -223,6 +251,15 @@ final class BridgeStore: ObservableObject {
     threadDetail = nil
     selectedThreadID = thread.id
     send(.subscribe(ThreadSubscription(threadID: thread.id)))
+  }
+
+  func closeThread(threadID: String) {
+    guard visibleThreadID == threadID else { return }
+    visibleThreadID = nil
+  }
+
+  func dismissUnreadNotification() {
+    unreadNotification = nil
   }
 
   func sendMessage(_ text: String, to threadID: String) {
@@ -342,6 +379,7 @@ final class BridgeStore: ObservableObject {
     case .threadDetail(let detail):
       let reconciled = reconcileOptimisticMessages(in: detail)
       threadDetail = reconciled
+      if visibleThreadID == detail.thread.id { markThreadRead(detail.thread.id) }
       rememberActivity(in: reconciled)
       isSending = false
     case .timelineEvent(let item):
@@ -378,10 +416,50 @@ final class BridgeStore: ObservableObject {
   }
 
   private func applyWorkspace(_ snapshot: WorkspaceSnapshot) {
-    workspace = WorkspaceOrderStabilizer.apply(snapshot, preserving: workspace)
+    let hadWorkspace = workspace != nil || !observedThreadUpdates.isEmpty
+    let stabilized = WorkspaceOrderStabilizer.apply(snapshot, preserving: workspace)
+    let threads = stabilized.projects.flatMap(\.threads)
+    let validIDs = Set(threads.map(\.id))
+    var newestUnread: ThreadSummary?
+
+    for thread in threads {
+      let timestamp = thread.updatedAt.timeIntervalSince1970
+      let previous = observedThreadUpdates[thread.id]
+      let isNewActivity = previous.map { timestamp > $0 + 0.001 } ?? hadWorkspace
+      if isNewActivity, visibleThreadID != thread.id {
+        unreadThreadIDs.insert(thread.id)
+        if newestUnread == nil || thread.updatedAt > newestUnread!.updatedAt {
+          newestUnread = thread
+        }
+      }
+      observedThreadUpdates[thread.id] = max(previous ?? timestamp, timestamp)
+      if visibleThreadID == thread.id { unreadThreadIDs.remove(thread.id) }
+    }
+
+    unreadThreadIDs.formIntersection(validIDs)
+    observedThreadUpdates = observedThreadUpdates.filter { validIDs.contains($0.key) }
+    persistUnreadState()
+    workspace = stabilized
+    if let newestUnread {
+      unreadNotification = ThreadUnreadNotification(
+        threadID: newestUnread.id,
+        title: newestUnread.title,
+        detail: newestUnread.status == .waiting ? "Waiting for you" : "New thread activity"
+      )
+    }
   }
 
   private func mergeTimelineEvent(_ item: TimelineItem) {
+    let timestamp = item.timestamp.timeIntervalSince1970
+    observedThreadUpdates[item.threadID] = max(
+      observedThreadUpdates[item.threadID] ?? timestamp,
+      timestamp
+    )
+    if visibleThreadID != item.threadID {
+      markThreadUnread(item.threadID, detail: item.title)
+    } else {
+      markThreadRead(item.threadID)
+    }
     guard var detail = threadDetail, detail.thread.id == item.threadID else { return }
     var timeline = detail.timeline
 
@@ -625,6 +703,30 @@ final class BridgeStore: ObservableObject {
     static let pinnedProjectIDs = "eng.pinned-project-ids"
     static let focusPinnedOnly = "eng.focus-pinned-only"
     static let connectionPreference = "eng.connection-preference"
+    static let unreadThreadIDs = "eng.unread-thread-ids"
+    static let observedThreadUpdates = "eng.observed-thread-updates"
+  }
+
+  private func markThreadUnread(_ threadID: String, detail: String) {
+    unreadThreadIDs.insert(threadID)
+    persistUnreadState()
+    let title = projects.flatMap(\.threads).first { $0.id == threadID }?.title ?? "Codex thread"
+    unreadNotification = ThreadUnreadNotification(
+      threadID: threadID,
+      title: title,
+      detail: detail.isEmpty ? "New thread activity" : detail
+    )
+  }
+
+  private func markThreadRead(_ threadID: String) {
+    unreadThreadIDs.remove(threadID)
+    if unreadNotification?.threadID == threadID { unreadNotification = nil }
+    persistUnreadState()
+  }
+
+  private func persistUnreadState() {
+    preferences.set(Array(unreadThreadIDs).sorted(), forKey: PreferenceKey.unreadThreadIDs)
+    preferences.set(observedThreadUpdates, forKey: PreferenceKey.observedThreadUpdates)
   }
 
   private func applyDemoState() {
@@ -637,6 +739,12 @@ final class BridgeStore: ObservableObject {
       analytics = DemoFixtures.analytics
       phoneHistory = DemoFixtures.phoneHistory
       macHistory = DemoFixtures.macHistory
+      unreadThreadIDs = ["demo-waiting"]
+      unreadNotification = ThreadUnreadNotification(
+        threadID: "demo-waiting",
+        title: "Review transport safeguards",
+        detail: "Waiting for you"
+      )
     #endif
   }
 }

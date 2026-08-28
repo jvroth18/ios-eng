@@ -35,6 +35,7 @@ struct ThreadView: View {
     .toolbar(.hidden, for: .navigationBar)
     .navigationBarBackButtonHidden(true)
     .task(id: thread.id) { store.subscribe(to: thread) }
+    .onDisappear { store.closeThread(threadID: thread.id) }
   }
 
   private var displayedDetail: ThreadDetail? {

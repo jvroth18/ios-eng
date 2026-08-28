@@ -82,11 +82,23 @@ struct BridgeStoreTests {
     #expect(!second.isProjectPinned("ios-eng"))
   }
 
-  private static func thread(_ id: String) -> ThreadSummary {
+  private static func thread(_ id: String, updatedAt: Date = now) -> ThreadSummary {
     ThreadSummary(
       id: id, title: "Thread \(id)", preview: "", cwd: "/tmp/\(id)", repositoryRoot: "/tmp/\(id)",
       source: "cli", status: .active, controlLevel: .live, activeTurnID: "turn-\(id)",
-      updatedAt: now)
+      updatedAt: updatedAt)
+  }
+
+  private static func workspace(_ threads: [ThreadSummary]) -> WorkspaceSnapshot {
+    WorkspaceSnapshot(
+      bridgeName: "Mac",
+      projects: [
+        ProjectSummary(
+          id: "project", name: "Project", repositoryRoot: "/tmp/project", threads: threads,
+          updatedAt: threads.map(\.updatedAt).max() ?? now)
+      ],
+      generatedAt: now
+    )
   }
 
   private static func item(
@@ -141,6 +153,60 @@ struct BridgeStoreTests {
         message: .threadDetail(ThreadDetail(thread: thread, timeline: [command]))))
 
     #expect(store.currentActivitySummary(for: thread) == "Running command: Codex")
+  }
+
+  @Test func firstWorkspaceBaselinesThreadsThenBackgroundUpdatesBecomeUnread() {
+    let (store, _) = Self.makeStore()
+    let initial = Self.thread("t1")
+    store.receive(BridgeEnvelope(message: .workspaceSnapshot(Self.workspace([initial]))))
+
+    #expect(store.unreadCount == 0)
+    #expect(store.unreadNotification == nil)
+
+    let updated = Self.thread("t1", updatedAt: Self.now.addingTimeInterval(10))
+    store.receive(BridgeEnvelope(message: .workspaceSnapshot(Self.workspace([updated]))))
+
+    #expect(store.isThreadUnread("t1"))
+    #expect(store.unreadCount(in: [updated]) == 1)
+    #expect(store.unreadNotification?.threadID == "t1")
+    #expect(store.unreadNotification?.detail == "New thread activity")
+  }
+
+  @Test func visibleThreadStaysReadUntilNewActivityArrivesAfterClosing() {
+    let (store, _) = Self.makeStore()
+    let initial = Self.thread("t1")
+    store.receive(BridgeEnvelope(message: .workspaceSnapshot(Self.workspace([initial]))))
+    store.subscribe(to: initial)
+
+    let updated = Self.thread("t1", updatedAt: Self.now.addingTimeInterval(10))
+    store.receive(BridgeEnvelope(message: .workspaceSnapshot(Self.workspace([updated]))))
+    #expect(!store.isThreadUnread("t1"))
+
+    store.closeThread(threadID: "t1")
+    store.receive(
+      BridgeEnvelope(
+        message: .timelineEvent(Self.item("background-answer", body: "Done"))))
+    #expect(store.isThreadUnread("t1"))
+    #expect(store.unreadNotification?.detail == "Codex")
+
+    store.subscribe(to: updated)
+    #expect(!store.isThreadUnread("t1"))
+    #expect(store.unreadNotification == nil)
+  }
+
+  @Test func unreadStatePersistsAcrossStoreInstances() {
+    let defaults = Self.isolatedPreferences()
+    let first = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
+    first.receive(
+      BridgeEnvelope(message: .workspaceSnapshot(Self.workspace([Self.thread("t1")]))))
+    first.receive(
+      BridgeEnvelope(
+        message: .workspaceSnapshot(
+          Self.workspace([Self.thread("t1", updatedAt: Self.now.addingTimeInterval(10))]))))
+    #expect(first.isThreadUnread("t1"))
+
+    let second = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
+    #expect(second.isThreadUnread("t1"))
   }
 
   @Test func completedItemReplacesItsRunningVersionById() {
