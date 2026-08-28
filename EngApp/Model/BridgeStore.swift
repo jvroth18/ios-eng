@@ -28,7 +28,7 @@ struct AnalyticsPoint: Identifiable, Equatable, Sendable {
 
 @MainActor
 final class BridgeStore: ObservableObject {
-  @Published private(set) var connection: NearbyConnectionState = .searching
+  @Published private(set) var connection: BridgeConnectionState = .searching
   @Published private(set) var isPaired = false
   @Published private(set) var bridgeName: String?
   @Published private(set) var workspace: WorkspaceSnapshot?
@@ -45,7 +45,7 @@ final class BridgeStore: ObservableObject {
   @Published var presentedError: BridgeError?
 
   private let deviceID: UUID
-  private let client: NearbyClient
+  private let client: any BridgeClientTransport
   private let telemetrySampler = PhoneTelemetrySampler()
   private let demoMode: Bool
   private let automaticPairingCode: String?
@@ -182,7 +182,7 @@ final class BridgeStore: ObservableObject {
     presentedError = nil
   }
 
-  private func handle(_ event: NearbyClientEvent) {
+  private func handle(_ event: BridgeClientEvent) {
     switch event {
     case .state(let state):
       connection = state
@@ -311,6 +311,7 @@ final class BridgeStore: ObservableObject {
 
     let link = LinkTelemetry(
       sampledAt: analytics.link.sampledAt,
+      transport: client.kind,
       roundTripMilliseconds: analytics.link.roundTripMilliseconds,
       measuredBytesPerSecond: analytics.link.measuredBytesPerSecond,
       quality: analytics.link.quality,
@@ -341,6 +342,7 @@ final class BridgeStore: ObservableObject {
     let constrained = latestPhoneSample?.isConstrained ?? false
     let link = LinkTelemetry(
       sampledAt: receivedAt,
+      transport: client.kind,
       roundTripMilliseconds: latency,
       measuredBytesPerSecond: payloadRate,
       quality: TelemetryAnalysis.connectionQuality(

@@ -44,7 +44,7 @@ enum EngBridgeMain {
 
       let nearby = NearbyServer()
       let coordinator = BridgeCoordinator(
-        nearby: nearby,
+        transport: nearby,
         service: service,
         statusHandler: { message in
           FileHandle.standardOutput.write(Data("\(message)\n".utf8))

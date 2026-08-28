@@ -11,7 +11,9 @@ public final class NearbyServer: NSObject, @unchecked Sendable {
   private let advertiser: MCNearbyServiceAdvertiser
   private let lock = NSLock()
   private var envelopeHandler: (@Sendable (String, BridgeEnvelope) -> Void)?
-  private var stateHandler: (@Sendable (String, MCSessionState) -> Void)?
+  private var stateHandler: (@Sendable (String, BridgeTransportPeerState) -> Void)?
+
+  public let kind = BridgeTransportKind.nearbyAuto
 
   public init(displayName: String = Host.current().localizedName ?? "Eng Bridge") {
     let safeName = String(displayName.prefix(60))
@@ -33,7 +35,7 @@ public final class NearbyServer: NSObject, @unchecked Sendable {
 
   public func setHandlers(
     envelope: @escaping @Sendable (String, BridgeEnvelope) -> Void,
-    state: @escaping @Sendable (String, MCSessionState) -> Void
+    state: @escaping @Sendable (String, BridgeTransportPeerState) -> Void
   ) {
     lock.withLock {
       envelopeHandler = envelope
@@ -104,7 +106,14 @@ extension NearbyServer: MCSessionDelegate {
     didChange state: MCSessionState
   ) {
     let handler = lock.withLock { stateHandler }
-    handler?(peerID.displayName, state)
+    let transportState: BridgeTransportPeerState
+    switch state {
+    case .notConnected: transportState = .disconnected
+    case .connecting: transportState = .connecting
+    case .connected: transportState = .connected
+    @unknown default: transportState = .disconnected
+    }
+    handler?(peerID.displayName, transportState)
   }
 
   public func session(
@@ -151,3 +160,5 @@ extension NearbyServer: MCSessionDelegate {
     certificateHandler(true)
   }
 }
+
+extension NearbyServer: BridgeServerTransport {}

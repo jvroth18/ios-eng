@@ -90,7 +90,7 @@ struct ConnectionView: View {
           Image(systemName: "lock.shield.fill")
             .foregroundStyle(EngDesign.mint)
           Text(
-            "The phone never receives your Codex credentials. Nearby traffic is encrypted and the App Server stays on Mac loopback."
+            "Nearby Auto uses encrypted Bluetooth or Wi-Fi without exposing Codex credentials. The App Server stays on Mac loopback."
           )
           .font(.caption)
           .foregroundStyle(EngDesign.muted)

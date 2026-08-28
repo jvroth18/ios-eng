@@ -1,7 +1,7 @@
 import Foundation
 
 public struct BridgeEnvelope: Codable, Equatable, Sendable, Identifiable {
-  public static let currentProtocolVersion = 2
+  public static let currentProtocolVersion = 3
 
   public let id: UUID
   public let sentAt: Date

@@ -1,9 +1,8 @@
 import EngCore
 import Foundation
-@preconcurrency import MultipeerConnectivity
 
 public actor BridgeCoordinator {
-  private let nearby: NearbyServer
+  private let transport: any BridgeServerTransport
   private let service: CodexThreadService
   private let telemetry: MacTelemetrySampler
   private let bridgeName: String
@@ -23,14 +22,14 @@ public actor BridgeCoordinator {
   private var eventTask: Task<Void, Never>?
 
   public init(
-    nearby: NearbyServer,
+    transport: any BridgeServerTransport,
     service: CodexThreadService,
     telemetry: MacTelemetrySampler = MacTelemetrySampler(),
     pairingGate: PairingGate = PairingGate(),
     bridgeName: String = Host.current().localizedName ?? "Mac",
     statusHandler: @escaping @Sendable (String) -> Void = { _ in }
   ) {
-    self.nearby = nearby
+    self.transport = transport
     self.service = service
     self.telemetry = telemetry
     self.pairingGate = pairingGate
@@ -42,7 +41,7 @@ public actor BridgeCoordinator {
   public var pairingExpiration: Date { pairingGate.expiresAt }
 
   public func start() async {
-    nearby.setHandlers(
+    transport.setHandlers(
       envelope: { [weak self] peer, envelope in
         Task { await self?.handle(envelope, from: peer) }
       },
@@ -50,7 +49,7 @@ public actor BridgeCoordinator {
         Task { await self?.peer(peer, changed: state) }
       }
     )
-    nearby.start()
+    transport.start()
     await refreshNow()
 
     refreshTask = Task { [weak self] in
@@ -77,7 +76,7 @@ public actor BridgeCoordinator {
     refreshTask?.cancel()
     telemetryTask?.cancel()
     eventTask?.cancel()
-    nearby.stop()
+    transport.stop()
   }
 
   private func handle(_ envelope: BridgeEnvelope, from peer: String) async {
@@ -101,10 +100,12 @@ public actor BridgeCoordinator {
         deviceID: request.deviceID,
         bridgeName: bridgeName
       )
-      try? nearby.send(BridgeEnvelope(message: .pairResult(result)), to: peer)
+      try? transport.send(BridgeEnvelope(message: .pairResult(result)), to: peer)
       if result.accepted {
         pairedPeers.insert(peer)
-        statusHandler("Paired \(request.deviceName) over an encrypted nearby session.")
+        statusHandler(
+          "Paired \(request.deviceName) over \(transport.kind.title) (\(transport.kind.securityLabel))."
+        )
         await sendInitialState(to: peer)
       } else {
         statusHandler("Pairing rejected for \(request.deviceName): \(result.reason ?? "unknown")")
@@ -132,11 +133,11 @@ public actor BridgeCoordinator {
       case .subscribe(let subscription):
         subscriptions[peer] = subscription.threadID
         let detail = try await service.subscribe(threadID: subscription.threadID)
-        try nearby.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
+        try transport.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
       case .sendMessage(let request):
         _ = try await service.sendMessage(threadID: request.threadID, text: request.normalizedText)
         let detail = try await service.threadDetail(threadID: request.threadID)
-        try nearby.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
+        try transport.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
       case .interrupt(let request):
         try await service.interrupt(threadID: request.threadID, turnID: request.turnID)
       case .approvalResponse(let response):
@@ -173,7 +174,7 @@ public actor BridgeCoordinator {
           bridgeReceivedAt: receivedAt,
           payloadBytes: ping.payloadBytes
         )
-        try nearby.send(BridgeEnvelope(message: .pong(pong)), to: peer)
+        try transport.send(BridgeEnvelope(message: .pong(pong)), to: peer)
       case .clientHello, .pair, .pairResult, .workspaceSnapshot, .workspacePage, .threadDetail,
         .timelineEvent, .pong, .error:
         break
@@ -244,7 +245,7 @@ public actor BridgeCoordinator {
 
   private func sendWorkspace(_ workspace: WorkspaceSnapshot, to peer: String) throws {
     for page in WorkspacePager.pages(for: workspace) {
-      try nearby.send(BridgeEnvelope(message: .workspacePage(page)), to: peer)
+      try transport.send(BridgeEnvelope(message: .workspacePage(page)), to: peer)
     }
   }
 
@@ -253,7 +254,7 @@ public actor BridgeCoordinator {
     let phone = phoneAnalytics[peer]?.phone
     let link = phoneAnalytics[peer]?.link ?? LinkTelemetry()
     let snapshot = AnalyticsSnapshot(phone: phone, mac: lastMacTelemetry, link: link)
-    try? nearby.send(BridgeEnvelope(message: .analytics(snapshot)), to: peer)
+    try? transport.send(BridgeEnvelope(message: .analytics(snapshot)), to: peer)
   }
 
   private func handleAppServerEvent(_ event: AppServerInbound) async {
@@ -267,7 +268,7 @@ public actor BridgeCoordinator {
     case .notification(let method, let params):
       if let item = CodexTimelineMapper.mapEvent(method: method, params: params) {
         for (peer, threadID) in subscriptions where threadID == item.threadID {
-          try? nearby.send(BridgeEnvelope(message: .timelineEvent(item)), to: peer)
+          try? transport.send(BridgeEnvelope(message: .timelineEvent(item)), to: peer)
         }
       }
       if method == "turn/completed" || method == "thread/status/changed" {
@@ -285,14 +286,14 @@ public actor BridgeCoordinator {
     guard let threadID = subscriptions[peer],
       let detail = try? await service.threadDetail(threadID: threadID)
     else { return }
-    try? nearby.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
+    try? transport.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
   }
 
-  private func peer(_ peer: String, changed state: MCSessionState) {
+  private func peer(_ peer: String, changed state: BridgeTransportPeerState) {
     switch state {
     case .connected:
       statusHandler("Nearby peer connected: \(peer). Waiting for pairing confirmation.")
-    case .notConnected:
+    case .disconnected:
       statusHandler("Nearby peer disconnected: \(peer).")
     case .connecting:
       break
@@ -321,6 +322,6 @@ public actor BridgeCoordinator {
       recoverable: recoverable,
       relatedMessageID: id
     )
-    try? nearby.send(BridgeEnvelope(message: .error(error)), to: peer)
+    try? transport.send(BridgeEnvelope(message: .error(error)), to: peer)
   }
 }

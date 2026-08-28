@@ -3,6 +3,13 @@ import Testing
 @testable import EngCore
 
 struct TelemetryAnalysisTests {
+  @Test func nearbyTransportExplainsAutomaticBluetoothAndWifiSelection() {
+    #expect(BridgeTransportKind.nearbyAuto.title == "Nearby Auto")
+    #expect(BridgeTransportKind.nearbyAuto.detail.contains("Bluetooth"))
+    #expect(BridgeTransportKind.nearbyAuto.detail.contains("Wi-Fi"))
+    #expect(BridgeTransportKind.sshTunnel.securityLabel.contains("host-key"))
+  }
+
   @Test(arguments: [
     (20.0, 8_000_000.0, false, ConnectionQuality.excellent),
     (90.0, 2_000_000.0, false, ConnectionQuality.good),

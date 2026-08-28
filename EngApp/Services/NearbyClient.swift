@@ -1,19 +1,6 @@
 import Foundation
 @preconcurrency import MultipeerConnectivity
 
-enum NearbyConnectionState: Equatable, Sendable {
-  case searching
-  case connecting(String)
-  case connected(String)
-  case disconnected
-  case failed(String)
-}
-
-enum NearbyClientEvent: Sendable {
-  case state(NearbyConnectionState)
-  case envelope(BridgeEnvelope)
-}
-
 final class NearbyClient: NSObject, @unchecked Sendable {
   static let serviceType = "ios-eng"
   static let maximumFrameBytes = 2 * 1_024 * 1_024
@@ -23,7 +10,9 @@ final class NearbyClient: NSObject, @unchecked Sendable {
   private let browser: MCNearbyServiceBrowser
   private let lock = NSLock()
   private var invitedPeerNames = Set<String>()
-  private var eventHandler: (@Sendable (NearbyClientEvent) -> Void)?
+  private var eventHandler: (@Sendable (BridgeClientEvent) -> Void)?
+
+  let kind = BridgeTransportKind.nearbyAuto
 
   init(displayName: String) {
     let safeName = String("\(displayName) · Eng".prefix(60))
@@ -35,7 +24,7 @@ final class NearbyClient: NSObject, @unchecked Sendable {
     browser.delegate = self
   }
 
-  func setEventHandler(_ handler: @escaping @Sendable (NearbyClientEvent) -> Void) {
+  func setEventHandler(_ handler: @escaping @Sendable (BridgeClientEvent) -> Void) {
     lock.withLock { eventHandler = handler }
   }
 
@@ -73,11 +62,13 @@ final class NearbyClient: NSObject, @unchecked Sendable {
     try session.send(data, toPeers: peers, with: .reliable)
   }
 
-  private func emit(_ event: NearbyClientEvent) {
+  private func emit(_ event: BridgeClientEvent) {
     let handler = lock.withLock { eventHandler }
     handler?(event)
   }
 }
+
+extension NearbyClient: BridgeClientTransport {}
 
 extension NearbyClient: MCNearbyServiceBrowserDelegate {
   func browser(
@@ -94,7 +85,7 @@ extension NearbyClient: MCNearbyServiceBrowserDelegate {
   }
 
   func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
-    lock.withLock { invitedPeerNames.remove(peerID.displayName) }
+    _ = lock.withLock { invitedPeerNames.remove(peerID.displayName) }
   }
 
   func browser(
@@ -109,7 +100,7 @@ extension NearbyClient: MCSessionDelegate {
   func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
     switch state {
     case .notConnected:
-      lock.withLock { invitedPeerNames.remove(peerID.displayName) }
+      _ = lock.withLock { invitedPeerNames.remove(peerID.displayName) }
       emit(.state(.disconnected))
       browser.startBrowsingForPeers()
     case .connecting:

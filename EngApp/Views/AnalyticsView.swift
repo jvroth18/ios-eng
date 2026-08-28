@@ -108,6 +108,19 @@ struct AnalyticsView: View {
         )
       }
 
+      HStack(alignment: .top, spacing: 10) {
+        Image(systemName: transportSymbol)
+          .foregroundStyle(EngDesign.cyan)
+        VStack(alignment: .leading, spacing: 3) {
+          Text(store.analytics.link.transport.title)
+            .font(.subheadline.weight(.semibold))
+          Text(store.analytics.link.transport.detail)
+            .font(.caption)
+            .foregroundStyle(EngDesign.muted)
+            .lineSpacing(2)
+        }
+      }
+
       HStack {
         StatusDot(color: linkColor, pulsing: store.analytics.link.quality == .excellent)
         Text(store.analytics.link.quality.rawValue.capitalized)
@@ -165,6 +178,14 @@ struct AnalyticsView: View {
     case .constrained: EngDesign.amber
     case .poor: EngDesign.coral
     case .unavailable: EngDesign.muted
+    }
+  }
+
+  private var transportSymbol: String {
+    switch store.analytics.link.transport {
+    case .nearbyAuto: "dot.radiowaves.left.and.right"
+    case .wifiDirect: "wifi"
+    case .sshTunnel: "lock.shield.fill"
     }
   }
 }

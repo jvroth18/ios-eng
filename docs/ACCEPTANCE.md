@@ -11,8 +11,9 @@ This file keeps the original goal testable instead of allowing the implementatio
 | Full bidirectional mirror | History read, streamed agent delta, phone message/new turn, active-turn steer, interrupt, approval/input response, and Mac-side read-back where supported |
 | Beautifully simple | Rendered simulator/device screenshots of Projects, Thread, pairing/empty/error states, and accessibility checks |
 | Analytics for iPhone and MacBook | Live CPU/memory/disk/power/thermal/interface/throughput/latency samples with timestamps from both devices |
+| Bluetooth and Wi-Fi nearby operation | Apple Nearby Auto transport with required encryption, explicit supported-bearer copy, and no unsupported claim about the selected radio |
+| Fast secure remote path | Transport-neutral protocol, authenticated direct Wi-Fi implementation, and host-key-verified SSH tunnel without exposing App Server or Codex credentials |
 | Honest temperature behavior | Public thermal-state categories; no degree value or private API in source |
 | Incremental implementation | Separate validated commits pushed after contract, bridge, app, and final end-to-end phases |
 
 Simulator success alone does not satisfy the install, device telemetry, nearby transport, or live Codex requirements.
-

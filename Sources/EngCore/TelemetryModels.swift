@@ -102,6 +102,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable, Identifiable {
 
 public struct LinkTelemetry: Codable, Equatable, Sendable {
   public let sampledAt: Date
+  public let transport: BridgeTransportKind
   public let roundTripMilliseconds: Double?
   public let measuredBytesPerSecond: Double?
   public let quality: ConnectionQuality
@@ -110,6 +111,7 @@ public struct LinkTelemetry: Codable, Equatable, Sendable {
 
   public init(
     sampledAt: Date = Date(),
+    transport: BridgeTransportKind = .nearbyAuto,
     roundTripMilliseconds: Double? = nil,
     measuredBytesPerSecond: Double? = nil,
     quality: ConnectionQuality = .unavailable,
@@ -117,6 +119,7 @@ public struct LinkTelemetry: Codable, Equatable, Sendable {
     isConstrained: Bool? = nil
   ) {
     self.sampledAt = sampledAt
+    self.transport = transport
     self.roundTripMilliseconds = roundTripMilliseconds
     self.measuredBytesPerSecond = measuredBytesPerSecond
     self.quality = quality
