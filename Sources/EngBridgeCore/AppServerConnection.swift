@@ -33,6 +33,7 @@ public actor AppServerConnection {
   private var receiveTask: Task<Void, Never>?
   private var pending: [String: CheckedContinuation<JSONValue, any Error>] = [:]
   private var nextRequestID: UInt64 = 0
+  private var connectedURL: URL?
 
   public init(session: URLSession = .shared) {
     let stream = AsyncStream<AppServerInbound>.makeStream()
@@ -53,20 +54,27 @@ public actor AppServerConnection {
     receiveTask = Task { [weak self] in
       await self?.receiveLoop(socket)
     }
-
-    _ = try await request(
-      method: "initialize",
-      params: [
-        "clientInfo": [
-          "name": "ios_eng_bridge",
-          "title": "Eng Bridge",
-          "version": "0.1.0",
-        ],
-        "capabilities": ["experimentalApi": true],
-      ]
-    )
-    try await notify(method: "initialized", params: [:])
+    do {
+      _ = try await request(
+        method: "initialize",
+        params: [
+          "clientInfo": [
+            "name": "ios_eng_bridge",
+            "title": "Eng Bridge",
+            "version": "0.1.0",
+          ],
+          "capabilities": ["experimentalApi": true],
+        ]
+      )
+      try await notify(method: "initialized", params: [:])
+      connectedURL = url
+    } catch {
+      close(socket, failure: error)
+      throw error
+    }
   }
+
+  public var isConnected: Bool { socket != nil && connectedURL != nil }
 
   public func request(method: String, params: JSONValue = [:]) async throws -> JSONValue {
     guard socket != nil else {
@@ -108,15 +116,8 @@ public actor AppServerConnection {
   }
 
   public func disconnect() {
-    receiveTask?.cancel()
-    receiveTask = nil
-    socket?.cancel(with: .goingAway, reason: nil)
-    socket = nil
-    let error = AppServerFailure(message: "Connection closed")
-    for continuation in pending.values {
-      continuation.resume(throwing: error)
-    }
-    pending.removeAll()
+    guard let socket else { return }
+    close(socket, failure: AppServerFailure(message: "Connection closed"))
   }
 
   private func send(_ data: Data) async throws {
@@ -145,7 +146,7 @@ public actor AppServerConnection {
       }
     } catch {
       if !Task.isCancelled {
-        connectionFailed(error)
+        connectionFailed(error, from: socket)
       }
     }
   }
@@ -185,9 +186,18 @@ public actor AppServerConnection {
     pending.removeValue(forKey: id)?.resume(throwing: error)
   }
 
-  private func connectionFailed(_ error: any Error) {
-    socket = nil
-    let failure = AppServerFailure(message: error.localizedDescription)
+  private func connectionFailed(_ error: any Error, from socket: URLSessionWebSocketTask) {
+    guard self.socket === socket else { return }
+    close(socket, failure: AppServerFailure(message: error.localizedDescription))
+  }
+
+  private func close(_ socket: URLSessionWebSocketTask, failure: any Error) {
+    guard self.socket === socket else { return }
+    receiveTask?.cancel()
+    receiveTask = nil
+    socket.cancel(with: .goingAway, reason: nil)
+    self.socket = nil
+    connectedURL = nil
     for continuation in pending.values {
       continuation.resume(throwing: failure)
     }

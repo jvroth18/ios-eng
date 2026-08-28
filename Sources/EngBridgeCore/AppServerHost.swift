@@ -56,7 +56,7 @@ public actor AppServerHost {
     ownsProcess = false
   }
 
-  private func isReady() async -> Bool {
+  public func isReady() async -> Bool {
     guard let url = URL(string: "http://127.0.0.1:\(port)/readyz") else { return false }
     var request = URLRequest(url: url)
     request.timeoutInterval = 0.4

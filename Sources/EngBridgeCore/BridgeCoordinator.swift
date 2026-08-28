@@ -82,6 +82,13 @@ public actor BridgeCoordinator {
     transport.stop()
   }
 
+  public func appServerRecovered() async {
+    await refreshNow(forceBroadcast: true)
+    for peer in subscriptions.keys {
+      await sendSubscribedDetail(to: peer)
+    }
+  }
+
   private func handle(_ envelope: BridgeEnvelope, from peer: String) async {
     switch envelope.message {
     case .clientHello(let hello):

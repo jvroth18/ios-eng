@@ -11,10 +11,10 @@ enum EngBridgeMain {
     let port = parsePort(arguments) ?? 47_321
     let host = AppServerHost(port: port)
     let connection = AppServerConnection()
+    let supervisor = AppServerSupervisor(host: host, connection: connection)
 
     do {
-      let url = try await host.start()
-      try await connection.connect(to: url)
+      try await supervisor.start()
       let service = CodexThreadService(connection: connection)
 
       if smoke {
@@ -24,7 +24,7 @@ enum EngBridgeMain {
         try? await Task.sleep(for: .milliseconds(150))
         let metrics = await sampler.sample()
         let report = SmokeReport(
-          appServerURL: url.absoluteString,
+          appServerURL: await host.webSocketURL.absoluteString,
           projectCount: workspace.projects.count,
           threadCount: workspace.projects.flatMap(\.threads).count,
           liveThreadCount: workspace.projects.flatMap(\.threads).filter {
@@ -37,7 +37,7 @@ enum EngBridgeMain {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         FileHandle.standardOutput.write(try encoder.encode(report))
         FileHandle.standardOutput.write(Data("\n".utf8))
-        await connection.disconnect()
+        await supervisor.stop()
         await host.stop()
         return
       }
@@ -55,6 +55,20 @@ enum EngBridgeMain {
           FileHandle.standardOutput.write(Data("\(message)\n".utf8))
         }
       )
+      let supervisorTask = Task { [states = supervisor.states] in
+        for await state in states {
+          switch state {
+          case .connected:
+            FileHandle.standardOutput.write(Data("Codex App Server connected.\n".utf8))
+            await coordinator.appServerRecovered()
+          case .recovering(let attempt, let message):
+            FileHandle.standardError.write(
+              Data("Codex App Server recovery \(attempt): \(message)\n".utf8))
+          case .connecting, .stopped:
+            break
+          }
+        }
+      }
       await coordinator.start()
       let code = await coordinator.pairingCode
       let expiration = await coordinator.pairingExpiration
@@ -66,13 +80,14 @@ enum EngBridgeMain {
       print("Press Control-C to stop.\n")
 
       await waitForTerminationSignal()
+      supervisorTask.cancel()
       await coordinator.stop()
-      await connection.disconnect()
+      await supervisor.stop()
       await host.stop()
     } catch {
       FileHandle.standardError.write(
         Data("Eng Bridge failed: \(error.localizedDescription)\n".utf8))
-      await connection.disconnect()
+      await supervisor.stop()
       await host.stop()
       Foundation.exit(EXIT_FAILURE)
     }
