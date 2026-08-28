@@ -36,6 +36,15 @@ the owning Mac process controls their model.
 - The oversized-thread repair release `Eng` version `0.4.1` (build `5`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back at its new `/Eng.app/Eng` installation path.
 - The live-activity release `Eng` version `0.5.0` (build `6`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as the live `/Eng.app/Eng` process.
 - The full-screen conversation and unread-indicator release `Eng` version `0.5.1` (build `7`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as the live `/Eng.app/Eng` process.
+- The control, model, keyboard, and draft release `Eng` version `0.6.0` (build `10`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as PID 2488 at its new `/Eng.app/Eng` installation path.
+
+## August 28 control, model, keyboard, and draft release
+
+- Core/bridge coverage passes 50 tests in 15 suites. The iPhone 17 Pro simulator passes 33 tests in 5 suites with 0 failures, including independent persisted drafts and optimistic model selection with rejection rollback.
+- Visual simulator QA confirmed the always-present guarded Stop control, `Draft saved` state, active-turn `Next turn` model label, and full-width conversation composition. The keyboard notification moves the complete window with a single ease-in-out transition instead of relocating only the text field.
+- A live initialized read-only App Server probe on the deployed bridge returned five non-hidden models available to the signed-in account: GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5, and GPT-5.2. GPT-5.6 Sol was marked as the account default. The installed App Server logged its existing internal `failed to refresh available models: timeout waiting for child process to exit` warning during the probe but still returned the complete cached catalog; Eng caches that successful response for the bridge lifetime.
+- Desktop companion 4.0 (build 13) embeds the tested protocol v5 bridge with SHA-256 `127f32a67e4c258cc18e5738a94b33d7408e7dd8a0dbde3500690968aed1905f`. The canonical app launched a fresh owned App Server on port 52777, and both `/readyz` and `/healthz` returned HTTP 200. Desktop 3.9 remains recoverable as `Amphetamine Switch 3.9 pre-4.0.app`.
+- The physical iPhone installed and launched Eng 0.6.0 (build 10), reconnected over the encrypted direct-local route, sent a nominal phone diagnostic sample, and completed a measured 64 KB link probe. The release-scoped bridge log contains no message-too-long, not-connected, protocol-version, bridge-operation, pairing-rejection, or thread-store-conflict error.
 
 ## August 28 full-screen conversation, formatting, and unread activity
 
