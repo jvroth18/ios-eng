@@ -395,33 +395,7 @@ final class BridgeStore: ObservableObject {
       optimisticMessages[item.threadID]?.removeAll { $0.id == optimisticID }
     }
 
-    if item.state != .running,
-      let index = timeline.lastIndex(where: {
-        $0.state == .running && $0.kind == item.kind && $0.turnID == item.turnID
-      })
-    {
-      timeline[index] = item
-    } else if let index = timeline.firstIndex(where: { $0.id == item.id }) {
-      timeline[index] = item
-    } else if item.state == .running,
-      let last = timeline.last,
-      last.state == .running,
-      last.kind == item.kind,
-      last.turnID == item.turnID
-    {
-      timeline[timeline.count - 1] = TimelineItem(
-        id: last.id,
-        threadID: last.threadID,
-        turnID: last.turnID,
-        kind: last.kind,
-        state: .running,
-        title: last.title,
-        body: last.body + item.body,
-        timestamp: last.timestamp
-      )
-    } else {
-      timeline.append(item)
-    }
+    timeline = TimelineEventReducer.merge(item, into: timeline)
 
     detail = ThreadDetail(
       thread: detail.thread,
@@ -484,6 +458,7 @@ final class BridgeStore: ObservableObject {
         state: item.state == .failed ? .failed : .completed,
         title: item.title,
         body: item.body,
+        assistantPhase: item.assistantPhase,
         timestamp: item.timestamp
       )
     }
@@ -506,6 +481,7 @@ final class BridgeStore: ObservableObject {
       state: .failed,
       title: items[last].title,
       body: items[last].body,
+      assistantPhase: items[last].assistantPhase,
       timestamp: items[last].timestamp
     )
     items[last] = failed

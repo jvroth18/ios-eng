@@ -30,6 +30,7 @@ enum PhoneTimelineWindow {
           state: item.state,
           title: title,
           body: body,
+          assistantPhase: item.assistantPhase,
           timestamp: item.timestamp
         ))
       remainingBytes -= fixedCost + body.utf8.count

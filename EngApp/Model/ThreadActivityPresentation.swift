@@ -52,6 +52,10 @@ struct ThreadActivityPresentation: Equatable {
   private static func activity(for item: TimelineItem) -> ThreadActivityPresentation {
     switch item.kind {
     case .assistant:
+      if item.assistantPhase == .commentary {
+        return ThreadActivityPresentation(
+          title: "Codex update", detail: nonempty(item.body), symbol: "text.bubble", isActive: true)
+      }
       return ThreadActivityPresentation(
         title: "Writing response", detail: nil, symbol: "text.cursor", isActive: true)
     case .reasoning:

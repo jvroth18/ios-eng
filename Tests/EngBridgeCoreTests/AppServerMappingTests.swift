@@ -41,6 +41,7 @@ struct AppServerMappingTests {
             "type": "agentMessage",
             "id": "agent-1",
             "text": "Everything is green.",
+            "phase": "final_answer",
             "status": "completed",
           ],
         ],
@@ -58,6 +59,7 @@ struct AppServerMappingTests {
     #expect(result.items.map(\.kind) == [.user, .command, .assistant])
     #expect(result.items[1].title == "swift test")
     #expect(result.items[2].body == "Everything is green.")
+    #expect(result.items[2].assistantPhase == .finalAnswer)
   }
 
   @Test func mapsStreamingAgentDelta() throws {
@@ -67,13 +69,33 @@ struct AppServerMappingTests {
         params: [
           "threadId": "thread-1",
           "turnId": "turn-1",
+          "itemId": "agent-1",
           "delta": "Half of a streamed answer",
         ]
       )
     )
     #expect(item.kind == .assistant)
     #expect(item.state == .running)
+    #expect(item.id == "agent-1")
     #expect(item.body == "Half of a streamed answer")
+  }
+
+  @Test func mapsStartedCommentaryAsTheRunningStableItem() throws {
+    let item = try #require(
+      CodexTimelineMapper.mapEvent(
+        method: "item/started",
+        params: [
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "item": [
+            "type": "agentMessage", "id": "agent-1", "text": "", "phase": "commentary",
+          ],
+        ]
+      )
+    )
+    #expect(item.id == "agent-1")
+    #expect(item.state == .running)
+    #expect(item.assistantPhase == .commentary)
   }
 
   @Test func mapsCommandFileAndPlanStreamingDeltas() throws {
@@ -86,13 +108,39 @@ struct AppServerMappingTests {
       let item = try #require(
         CodexTimelineMapper.mapEvent(
           method: method,
-          params: ["threadId": "thread-1", "turnId": "turn-1", "delta": "chunk"]
+          params: [
+            "threadId": "thread-1", "turnId": "turn-1", "itemId": "item-1",
+            "delta": "chunk",
+          ]
         )
       )
       #expect(item.kind == kind)
       #expect(item.state == .running)
+      #expect(item.id == "item-1")
       #expect(item.body == "chunk")
     }
+  }
+
+  @Test func exposesReasoningSummariesButNotPrivateReasoningText() throws {
+    let summary = try #require(
+      CodexTimelineMapper.mapEvent(
+        method: "item/reasoning/summaryTextDelta",
+        params: [
+          "threadId": "thread-1", "turnId": "turn-1", "itemId": "reasoning-1",
+          "delta": "Inspecting the bridge logs",
+        ]
+      )
+    )
+    #expect(summary.id == "reasoning-1")
+    #expect(summary.kind == .reasoning)
+    #expect(
+      CodexTimelineMapper.mapEvent(
+        method: "item/reasoning/textDelta",
+        params: [
+          "threadId": "thread-1", "turnId": "turn-1", "itemId": "reasoning-1",
+          "delta": "private model reasoning",
+        ]
+      ) == nil)
   }
 
   @Test func preservesServerRequestIDForPhoneResponse() async throws {

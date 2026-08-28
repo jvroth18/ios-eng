@@ -116,13 +116,13 @@ struct BridgeStoreTests {
       BridgeEnvelope(message: .pairResult(PairResult(accepted: true, bridgeName: "Mac"))))
   }
 
-  @Test func streamingDeltasCoalesceIntoTheRunningItem() {
+  @Test func streamingDeltasCoalesceByStableItemID() {
     let (store, _) = Self.makeStore()
     let detail = ThreadDetail(thread: Self.thread("t1"), timeline: [])
     store.receive(BridgeEnvelope(message: .threadDetail(detail)))
 
     store.receive(BridgeEnvelope(message: .timelineEvent(Self.item("a1", body: "Hello"))))
-    store.receive(BridgeEnvelope(message: .timelineEvent(Self.item("a2", body: ", world"))))
+    store.receive(BridgeEnvelope(message: .timelineEvent(Self.item("a1", body: ", world"))))
 
     let timeline = store.threadDetail?.timeline ?? []
     #expect(timeline.count == 1)

@@ -264,6 +264,11 @@ public enum TimelineState: String, Codable, CaseIterable, Equatable, Sendable {
   case interrupted
 }
 
+public enum AssistantMessagePhase: String, Codable, CaseIterable, Equatable, Sendable {
+  case commentary
+  case finalAnswer = "final_answer"
+}
+
 public struct TimelineItem: Codable, Equatable, Sendable, Identifiable {
   public let id: String
   public let threadID: String
@@ -272,6 +277,7 @@ public struct TimelineItem: Codable, Equatable, Sendable, Identifiable {
   public let state: TimelineState
   public let title: String
   public let body: String
+  public let assistantPhase: AssistantMessagePhase?
   public let timestamp: Date
 
   public init(
@@ -282,6 +288,7 @@ public struct TimelineItem: Codable, Equatable, Sendable, Identifiable {
     state: TimelineState,
     title: String,
     body: String,
+    assistantPhase: AssistantMessagePhase? = nil,
     timestamp: Date
   ) {
     self.id = id
@@ -291,6 +298,7 @@ public struct TimelineItem: Codable, Equatable, Sendable, Identifiable {
     self.state = state
     self.title = title
     self.body = body
+    self.assistantPhase = assistantPhase
     self.timestamp = timestamp
   }
 }

@@ -44,7 +44,7 @@ public enum CodexTimelineMapper {
 
     if method == "item/agentMessage/delta", let delta = params["delta"]?.stringValue {
       return TimelineItem(
-        id: "delta:\(turnID ?? threadID):\(now.timeIntervalSince1970)",
+        id: streamItemID(params, fallback: "agent:\(turnID ?? threadID)"),
         threadID: threadID,
         turnID: turnID,
         kind: .assistant,
@@ -62,6 +62,7 @@ public enum CodexTimelineMapper {
         kind: .command,
         title: "Command output",
         body: delta,
+        itemID: params["itemId"]?.stringValue,
         threadID: threadID,
         turnID: turnID,
         now: now
@@ -73,6 +74,7 @@ public enum CodexTimelineMapper {
         kind: .fileChange,
         title: "File changes",
         body: delta,
+        itemID: params["itemId"]?.stringValue,
         threadID: threadID,
         turnID: turnID,
         now: now
@@ -84,15 +86,18 @@ public enum CodexTimelineMapper {
         kind: .plan,
         title: "Plan",
         body: delta,
+        itemID: params["itemId"]?.stringValue,
         threadID: threadID,
         turnID: turnID,
         now: now
       )
     }
 
-    if method.contains("reasoning"), let delta = params["delta"]?.stringValue {
+    if method == "item/reasoning/summaryTextDelta",
+      let delta = params["delta"]?.stringValue
+    {
       return TimelineItem(
-        id: "reasoning:\(turnID ?? threadID):\(now.timeIntervalSince1970)",
+        id: streamItemID(params, fallback: "reasoning:\(turnID ?? threadID)"),
         threadID: threadID,
         turnID: turnID,
         kind: .reasoning,
@@ -109,7 +114,8 @@ public enum CodexTimelineMapper {
         fallbackID: "event:\(UUID().uuidString)",
         threadID: threadID,
         turnID: turnID,
-        timestamp: now
+        timestamp: now,
+        forcedState: method == "item/started" ? .running : nil
       )
     }
 
@@ -133,12 +139,13 @@ public enum CodexTimelineMapper {
     kind: TimelineKind,
     title: String,
     body: String,
+    itemID: String?,
     threadID: String,
     turnID: String?,
     now: Date
   ) -> TimelineItem {
     TimelineItem(
-      id: "delta:\(kind.rawValue):\(turnID ?? threadID):\(now.timeIntervalSince1970)",
+      id: itemID ?? "delta:\(kind.rawValue):\(turnID ?? threadID)",
       threadID: threadID,
       turnID: turnID,
       kind: kind,
@@ -154,11 +161,12 @@ public enum CodexTimelineMapper {
     fallbackID: String,
     threadID: String,
     turnID: String?,
-    timestamp: Date
+    timestamp: Date,
+    forcedState: TimelineState? = nil
   ) -> TimelineItem {
     let type = item["type"]?.stringValue ?? "activity"
     let id = item["id"]?.stringValue ?? fallbackID
-    let state = timelineState(item["status"]?.stringValue)
+    let state = forcedState ?? timelineState(item["status"]?.stringValue)
 
     switch type {
     case "userMessage":
@@ -181,6 +189,7 @@ public enum CodexTimelineMapper {
         state: state,
         title: "Codex",
         body: item["text"]?.stringValue ?? textContent(item["content"]) ?? "",
+        assistantPhase: item["phase"]?.stringValue.flatMap(AssistantMessagePhase.init(rawValue:)),
         timestamp: timestamp
       )
     case "reasoning":
@@ -286,6 +295,10 @@ public enum CodexTimelineMapper {
     value
       .replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression)
       .capitalized
+  }
+
+  private static func streamItemID(_ params: JSONValue, fallback: String) -> String {
+    params["itemId"]?.stringValue ?? fallback
   }
 
   private static func date(fromEpoch value: Double?) -> Date? {

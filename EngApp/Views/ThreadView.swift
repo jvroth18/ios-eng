@@ -275,7 +275,7 @@ private struct MessageLine: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 3) {
       HStack(spacing: 6) {
-        Text(isUser ? "You" : "Codex")
+        Text(messageAuthor)
           .font(Win95Font.bold)
         Text(item.timestamp.formatted(date: .omitted, time: .shortened))
           .font(Win95Font.small)
@@ -303,6 +303,11 @@ private struct MessageLine: View {
     .padding(.horizontal, 8)
     .padding(.vertical, 6)
     .background(isUser ? Win95.highlight : Color.clear)
+  }
+
+  private var messageAuthor: String {
+    if isUser { return "You" }
+    return item.assistantPhase == .commentary ? "Codex update" : "Codex"
   }
 }
 
