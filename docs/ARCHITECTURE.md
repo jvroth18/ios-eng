@@ -24,7 +24,7 @@ The bridge asks Codex App Server for CLI and IDE threads, resolves each working 
 Each thread exposes a truthful control level:
 
 - `available`: persisted history is visible and the bridge can attempt to resume the existing thread.
-- `Mac Live`: another Mac Codex process owns the writer lock. Eng polls a bounded recent transcript and queues phone messages through the installed Codex CLI without trying to acquire a second writer.
+- `Mac Live`: another Mac Codex process owns the writer lock. Eng tails a bounded, allowlisted view of that thread's local event journal and queues phone messages through the installed Codex CLI without trying to acquire a second writer.
 - `live`: `thread/resume` succeeded on the bridge connection, so it receives item and turn notifications and may steer or interrupt the active turn, start a turn inside that same thread, and answer supported requests.
 
 Every refresh checks `thread/loaded/list` and resumes loaded threads on the bridge connection. This is what makes an active CLI or IDE thread stream to Eng even when another App Server client created it. A phone selection is also retained as a desired subscription and resumed again after an App Server reconnect. Existing independent sessions therefore become live without duplicating the thread.
@@ -35,6 +35,21 @@ For a `Mac Live` thread, message delivery uses `codex queue --thread … --messa
 …`, which preserves the existing owner. Stop mirrors Ctrl-C only when the writer
 lock resolves to exactly one same-user interactive `codex` process. The bridge
 refuses to signal GUI, noninteractive, ambiguous, or unverified processes.
+
+The external journal reader resolves only the exact rollout file whose UUID
+matches the selected thread. It initially reads at most the final 4 MB, then only
+newly appended bytes, retaining at most 120 projected items. It accepts observable
+`event_msg` records for user/assistant messages, reasoning summaries, commands,
+file changes, tools, compaction, web search, and image views. Session metadata,
+raw response records, raw or encrypted reasoning, unknown records, and every
+other thread are rejected. The selected detail refresh runs once per second;
+workspace discovery remains on its slower independent cadence.
+
+Bridge-owned live notifications retain the App Server `itemId` from start through
+each delta and completion. The reducer therefore updates the exact plan, command,
+tool, file-change, commentary, or final-answer row rather than merging neighboring
+messages. Only `reasoning/summaryTextDelta` is product-visible;
+`reasoning/textDelta` is deliberately ignored.
 
 ## Transport and pairing
 
@@ -72,5 +87,5 @@ iOS does not expose an exact device temperature to a normal app. Eng therefore r
 - UI controls use direct App Server methods only after a live `thread/resume` subscription. `Mac Live` controls instead use the separately validated queue and interactive-CLI Stop paths.
 - A message is not shown as delivered until the bridge acknowledges its Codex operation.
 - Approval and user-input cards retain their request IDs and become terminal after one response.
-- Unknown Codex events degrade to a compact activity entry rather than breaking the stream.
+- Unknown Codex item types degrade to a compact activity entry rather than breaking the stream; unknown journal records are ignored at the stricter external-writer boundary.
 - Analytics values carry timestamps and optionals; unavailable signals render as unavailable, not zero.

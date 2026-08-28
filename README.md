@@ -15,7 +15,8 @@ Codex App Server is the supported deep-client interface for conversation history
 Ordinary CLI sessions can always be discovered from Codex's local thread store. Live steering and approval handling require the thread to be controllable by the bridge/shared App Server. Eng displays `Observe`, `Message`, or `Live` on every thread so the user can see the real boundary.
 
 If another Codex CLI owns a thread, Eng opens it as `Mac Live` instead of failing
-on the single-writer lock. The bridge polls the recent observable transcript,
+on the single-writer lock. The bridge tails an allowlisted, read-only view of the
+owner's local event journal once per second, merges it with App Server summaries,
 uses Codex's supported `queue` command for phone messages, and can mirror Ctrl-C
 for Stop only after verifying the lock belongs to a same-user interactive Codex
 CLI. Noninteractive and GUI-owned sessions remain visible and queueable, but
@@ -26,6 +27,11 @@ retain current command/tool activity inside a strict phone projection. This
 prevents large persisted command output from disconnecting App Server. Once the
 phone has displayed a workspace, refreshes update entries in place instead of
 continually re-sorting projects and threads around the screen.
+
+Live rows retain App Server item identity, so commentary and final-answer text,
+plans, commands, file edits, tools, web activity, and compaction update the same
+stable row throughout their lifecycle. Eng displays observable reasoning summaries
+when Codex emits them, but never forwards raw or encrypted private reasoning.
 
 ## Status
 
