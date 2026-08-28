@@ -11,7 +11,7 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 
 ## Native app build and installation
 
-- Xcode simulator tests pass 20 tests with 0 failures on iPhone 17 Pro.
+- Xcode simulator tests pass 22 tests with 0 failures on iPhone 17 Pro.
 - A Release `iphoneos` build succeeds with Apple Development signing and automatic provisioning for bundle `dev.jvroth.eng`.
 - The last installed Release artifact before the active-writer repair was `Eng` version `0.2.0` (build `2`).
 - The configuration release `Eng` version `0.4.0` (build `4`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as a live `/Eng.app/Eng` process.
@@ -33,7 +33,14 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - Loaded external writers are remembered after the first active-writer response, so periodic workspace refresh and subscription recovery do not repeatedly retry `thread/resume` or create an App Server reconnect loop.
 - Phone messages for `Mac Live` threads use the installed `codex queue` command and never create or resume a duplicate thread.
 - Stop mirrors Ctrl-C only when the writer lock identifies exactly one same-user interactive Codex CLI process. GUI, noninteractive, ambiguous, and unverified owners fail closed.
-- Core tests cover active-writer fallback, bounded timeline projection, queued messages, external Stop routing, complete owned-process-tree shutdown, and writer-process validation. The simulator suite passes 20 tests with 0 failures.
+- Core tests cover active-writer fallback, bounded timeline projection, queued messages, external Stop routing, complete owned-process-tree shutdown, and writer-process validation. The simulator suite passes 22 tests with 0 failures.
+
+## August 28 oversized-thread and stable-order repair
+
+- The reproduced failure was an oversized full-history App Server WebSocket response, not an oversized phone-authored message. A persisted turn containing large command output exceeded Foundation's default inbound WebSocket ceiling before Eng could project it.
+- Historical `thread/turns/list` requests now use the installed App Server's supported `summary` items view. The loopback Mac client has an explicit 16 MB guarded receive ceiling for legitimate live events, and every mapped live timeline event is projected before phone transport.
+- Workspace refresh preserves the existing project order and each project's existing thread order while applying current status, summary, timestamps, and control state. New entries appear once and removed entries disappear; routine five-second refreshes no longer reshuffle the visible list.
+- Regression tests assert the summary request and stable ordering across status/time changes, additions, and removals. Core tests pass 43 tests in 14 suites and the iPhone simulator passes 22 tests in 3 suites.
 
 ## August 28 phone configuration and focus
 

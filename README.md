@@ -21,6 +21,12 @@ for Stop only after verifying the lock belongs to a same-user interactive Codex
 CLI. Noninteractive and GUI-owned sessions remain visible and queueable, but
 must be stopped from their Mac window.
 
+Historical thread reads use App Server's display-summary view, while live events
+retain current command/tool activity inside a strict phone projection. This
+prevents large persisted command output from disconnecting App Server. Once the
+phone has displayed a workspace, refreshes update entries in place instead of
+continually re-sorting projects and threads around the screen.
+
 ## Status
 
 This repository was delivered in validated, incremental commits:
