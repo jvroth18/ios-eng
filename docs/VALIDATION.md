@@ -44,6 +44,14 @@ the Mac thread.
 - The live-activity release `Eng` version `0.5.0` (build `6`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as the live `/Eng.app/Eng` process.
 - The full-screen conversation and unread-indicator release `Eng` version `0.5.1` (build `7`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as the live `/Eng.app/Eng` process.
 - The control, model, keyboard, and draft release `Eng` version `0.6.0` (build `10`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as PID 2488 at its new `/Eng.app/Eng` installation path.
+- The reversible hidden-thread release `Eng` version `0.6.1` (build `11`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as PID 2652 at its new `/Eng.app/Eng` installation path.
+
+## August 28 reversible hidden threads
+
+- A persistence test hides one of two threads, proves its later activity remains quiet, excludes its unread state and saved draft from visible counts, reconstructs the store from the same preferences, restores the thread, and recovers both drafts.
+- The iPhone 17 Pro simulator passes 34 tests in 5 suites with 0 failures. Visual QA confirmed a compact eye-slash action on every visible row and a Config group that explains the local-only boundary and provides Unhide and Unhide all.
+- The signed physical build installed and launched as Eng 0.6.1 (build 11), reconnected first through encrypted Nearby and then the preferred encrypted direct-local route, sent nominal phone diagnostics, and measured the 64 KB link probe at 69.9 ms and 1.87 MB/s.
+- The release-scoped bridge log contains no message-too-long, not-connected, protocol-version, bridge-operation, pairing-rejection, or thread-store-conflict error. Desktop companion 4.0 remained healthy on its existing protocol v5 bridge; no desktop rebuild or restart was necessary because hidden-thread state never crosses the phone boundary.
 
 ## August 28 control, model, keyboard, and draft release
 
