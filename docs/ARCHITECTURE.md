@@ -9,7 +9,7 @@ Codex CLI / IDE threads
           v
      EngBridge on Mac
           |
-          | encrypted MultipeerConnectivity session + pairing code
+          | encrypted Nearby Auto or authenticated direct Wi-Fi
           v
         Eng on iPhone
 ```
@@ -34,7 +34,9 @@ The transport boundary is shared by the bridge coordinator and phone store, so C
 
 The default `Nearby Auto` transport uses `MCSession` with required encryption. On iOS, Apple may carry that session over infrastructure Wi-Fi, peer-to-peer Wi-Fi, or Bluetooth. The framework does not expose which bearer it selected, so Eng labels the path `Nearby Auto` rather than making an unsupported Bluetooth or Wi-Fi claim. Each bridge process presents a short-lived pairing code on its first phone connection; reconnects to that running process reuse the validated device identity.
 
-Protocol v3 carries a transport identity in link telemetry. The planned direct Wi-Fi implementation uses Network Framework and must authenticate the bridge independently before it can become preferred. The SSH experiment must verify the server host key and use public-key authentication; accepting any host key or storing a password in app preferences is outside the product boundary.
+Protocol v4 carries transport identity and a short-lived direct-transport bootstrap. After nearby pairing, the Mac sends a random 256-bit credential inside the encrypted `MCSession`. Network Framework then discovers the Mac through Bonjour, enables peer-to-peer Wi-Fi, and encrypts and authenticates every bounded TCP frame with AES-GCM. Direct Wi-Fi becomes preferred when ready and the nearby session remains the fallback.
+
+The SSH path is specified in [SSH Pipe](SSH-PIPE.md). It must verify the server host key and use public-key authentication; accepting any host key, exposing App Server, or storing a password in app preferences is outside the product boundary.
 
 Pairing never transmits Codex login material. Protocol frames are bounded and typed; unknown versions and malformed payloads are rejected. Codex App Server remains bound to loopback for every transport.
 

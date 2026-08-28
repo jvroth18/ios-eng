@@ -5,12 +5,12 @@ Eng is a private, native iPhone companion for Codex work running on your Mac. It
 The repository contains three pieces:
 
 - `EngCore`: the versioned, tested wire protocol and shared models.
-- `EngBridge`: a Mac companion that connects to Codex App Server and advertises an encrypted nearby session.
+- `EngBridge`: a Mac companion that connects to Codex App Server and advertises encrypted nearby and direct Wi-Fi sessions.
 - `Eng`: a deliberately small SwiftUI iPhone app with Projects, Thread, and Analytics surfaces.
 
 ## Product boundary
 
-Codex App Server is the supported deep-client interface for conversation history, streamed events, turns, steering, and approvals. Eng keeps that interface on the Mac. The phone talks only to the paired bridge over an encrypted Apple Multipeer Connectivity session.
+Codex App Server is the supported deep-client interface for conversation history, streamed events, turns, steering, and approvals. Eng keeps that interface on the Mac. The phone talks only to the paired bridge. Nearby pairing uses encrypted Apple Multipeer Connectivity; after pairing, an authenticated AES-GCM channel automatically prefers direct Wi-Fi and falls back to nearby.
 
 Ordinary CLI sessions can always be discovered from Codex's local thread store. Live steering and approval handling require the thread to be controllable by the bridge/shared App Server. Eng displays `Observe`, `Message`, or `Live` on every thread so the user can see the real boundary.
 
@@ -59,4 +59,4 @@ On each bridge launch, enter the short pairing code shown in the Mac terminal. R
 
 ## Privacy
 
-Eng is local-first. It does not contain an OpenAI API key, copy Codex authentication to the phone, or open a LAN HTTP/WebSocket port. Pairing and traffic use an encrypted nearby session. Diagnostic history is short-lived and remains on the two devices.
+Eng is local-first. It does not contain an OpenAI API key, copy Codex authentication to the phone, or expose Codex App Server. Its Bonjour TCP listener accepts only frames authenticated and encrypted with a random 256-bit credential delivered inside the paired nearby session. Diagnostic history is short-lived and remains on the two devices.
