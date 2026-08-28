@@ -59,6 +59,33 @@ struct LiveThreadServiceTests {
     #expect(!(await service.isSubscribed(threadID: "thread-1")))
   }
 
+  @Test func loadedExternalWriterIsProbedOnceInsteadOfOnEveryRefresh() async throws {
+    let client = MockAppServerClient()
+    await client.enqueue(method: "thread/loaded/list", response: ["data": ["thread-1"]])
+    await client.enqueueFailure(
+      method: "thread/resume",
+      failure: AppServerFailure(
+        code: -32_600, message: "thread thread-1 already has an active writer"))
+    await client.enqueue(
+      method: "thread/list",
+      response: ["data": [Self.thread(status: "active")], "nextCursor": nil])
+    await client.enqueue(method: "thread/loaded/list", response: ["data": ["thread-1"]])
+    await client.enqueue(
+      method: "thread/list",
+      response: ["data": [Self.thread(status: "active")], "nextCursor": nil])
+    await client.enqueue(method: "thread/turns/list", response: ["data": [Self.activeTurn]])
+    let service = CodexThreadService(connection: client, bridgeName: "Test Mac")
+
+    let first = try await service.refreshWorkspace()
+    let second = try await service.refreshWorkspace()
+    let detail = try await service.subscribe(threadID: "thread-1")
+
+    #expect(first.projects.flatMap(\.threads).first?.controlLevel == .observe)
+    #expect(second.projects.flatMap(\.threads).first?.controlLevel == .observe)
+    #expect(detail.thread.controlLevel == .observe)
+    #expect(await client.requestedMethods.filter { $0 == "thread/resume" }.count == 1)
+  }
+
   @Test func activeWriterMessagesQueueIntoTheOwningMacSession() async throws {
     let client = MockAppServerClient()
     let external = MockExternalThreadController()

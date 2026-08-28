@@ -102,10 +102,12 @@ public actor CodexThreadService {
 
   public func subscribe(threadID: String) async throws -> ThreadDetail {
     desiredThreadIDs.insert(threadID)
-    do {
-      try await resume(threadID: threadID)
-    } catch let error where Self.isActiveWriterFailure(error) {
-      externallyOwnedThreadIDs.insert(threadID)
+    if !externallyOwnedThreadIDs.contains(threadID) {
+      do {
+        try await resume(threadID: threadID)
+      } catch let error where Self.isActiveWriterFailure(error) {
+        externallyOwnedThreadIDs.insert(threadID)
+      }
     }
     return try await threadDetail(threadID: threadID)
   }
@@ -117,7 +119,7 @@ public actor CodexThreadService {
     pendingRequests.removeAll()
     try await refreshLoadedThreads()
     await subscribeLoadedThreads()
-    for threadID in desiredThreadIDs {
+    for threadID in desiredThreadIDs where !externallyOwnedThreadIDs.contains(threadID) {
       do {
         try await resume(threadID: threadID)
       } catch let error where Self.isActiveWriterFailure(error) {
@@ -337,8 +339,18 @@ public actor CodexThreadService {
   }
 
   private func subscribeLoadedThreads() async {
-    for threadID in loadedThreadIDs where !subscribedThreadIDs.contains(threadID) {
-      try? await resume(threadID: threadID)
+    for threadID in loadedThreadIDs
+    where !subscribedThreadIDs.contains(threadID)
+      && !externallyOwnedThreadIDs.contains(threadID)
+    {
+      do {
+        try await resume(threadID: threadID)
+      } catch let error where Self.isActiveWriterFailure(error) {
+        externallyOwnedThreadIDs.insert(threadID)
+      } catch {
+        // A later refresh retries transient failures. Active external writers are
+        // remembered so polling does not create an error/reconnect loop.
+      }
     }
   }
 

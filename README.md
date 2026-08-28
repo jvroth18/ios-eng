@@ -6,7 +6,7 @@ The repository contains three pieces:
 
 - `EngCore`: the versioned, tested wire protocol and shared models.
 - `EngBridge`: a Mac companion that connects to Codex App Server and advertises encrypted nearby and direct-local sessions.
-- `Eng`: a deliberately small SwiftUI iPhone app with Projects, Thread, and Analytics surfaces, drawn in a classic Windows 9x "analog" style (beveled windows, tab pages, LEDs, and a green-phosphor system monitor) from the `EngApp/Design/Win95.swift` kit.
+- `Eng`: a deliberately small SwiftUI iPhone app with Projects, Thread, Analytics, and Config surfaces, drawn in a classic Windows 9x "analog" style (beveled windows, tab pages, LEDs, and a green-phosphor system monitor) from the `EngApp/Design/Win95.swift` kit.
 
 ## Product boundary
 
@@ -63,6 +63,12 @@ open Eng.xcodeproj
 The generated Xcode project is intentionally ignored; `project.yml` is its source of truth. The debug-only `-eng-demo`, `-eng-analytics`, and `-eng-thread` launch arguments render deterministic project, analytics, and thread states for visual QA without altering release behavior. `-eng-pair-code CODE` automates pairing only in debug builds for repeatable simulator integration tests.
 
 The first phone opened during the bridge pairing window is remembered automatically. The short Mac-terminal code remains available for a replacement phone; normal reconnects do not require it. For USB-C, enable iPhone Personal Hotspot and connect the trusted cable so Apple exposes an `iPhone USB` network interface to Network Framework. Analytics retains only the most recent 90 in-memory samples per device. Exact iPhone temperature is not available through Apple’s public API, so Eng reports `ProcessInfo.thermalState` categories instead of degrees.
+
+The Config tab persists a connection preference (`Automatic`, `USB-C first`,
+`Wi-Fi first`, or `Nearby only`) and pinned focus folders. USB-C and Wi-Fi
+preferences keep Nearby available as a recovery path. iOS does not expose an
+app API that keeps USB-C data active while disabling charging, so Eng controls
+only its data route and never presents a charging switch it cannot enforce.
 
 The running bridge publishes its owned loopback port and process identifier to
 `~/Library/Application Support/EngBridge/runtime.json`. `Scripts/codex-eng`
