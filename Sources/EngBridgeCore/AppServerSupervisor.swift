@@ -79,6 +79,7 @@ public actor AppServerSupervisor {
       guard !Task.isCancelled else { return }
       if await hostReady(), await connectionReady() { continue }
       await disconnect()
+      transition(to: .connecting)
       var attempt = 0
       while !Task.isCancelled {
         attempt += 1

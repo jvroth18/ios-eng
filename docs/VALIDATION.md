@@ -5,7 +5,7 @@ Validated on August 27, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 ## Contracts and unit coverage
 
 - `swift format lint --strict` passes across app, bridge, shared sources, tests, and scripts.
-- `swift test` passes 30 tests in 9 suites.
+- `swift test` passes 31 tests in 9 suites.
 - Coverage includes protocol round trips, encrypted-pairing gates, Git-root grouping, App Server event and request mapping, public Mac telemetry, link classification, a real 64 KB probe payload, lossless workspace paging, App Server supervision, subscription recovery, active-turn steering, idle existing-thread turns, and the phone command allowlist.
 - The paging stress fixture carries 245 threads, keeps every encoded frame below the Multipeer Connectivity resource ceiling, and reassembles without loss.
 

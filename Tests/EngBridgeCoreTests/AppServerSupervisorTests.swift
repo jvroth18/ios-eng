@@ -4,6 +4,36 @@ import Testing
 @testable import EngBridgeCore
 
 struct AppServerSupervisorTests {
+  @Test func publishesConnectedAfterFirstAttemptRecovery() async throws {
+    let probe = RecoveryProbe()
+    let supervisor = AppServerSupervisor(
+      pollInterval: .milliseconds(10),
+      ensureHost: { try await probe.ensureHost() },
+      hostReady: { await probe.hostReady },
+      connectionReady: { await probe.connectionReady },
+      connect: { try await probe.connect($0) },
+      disconnect: { await probe.disconnect() }
+    )
+    let recorder = StateRecorder()
+    let recordingTask = Task { [states = supervisor.states] in
+      for await state in states { await recorder.append(state) }
+    }
+
+    try await supervisor.start()
+    await probe.dropRuntime()
+
+    for _ in 0..<100 {
+      if await recorder.connectedCount >= 2 { break }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+
+    #expect(await probe.connectionAttempts >= 2)
+    #expect(await recorder.connectedCount == 2)
+
+    await supervisor.stop()
+    recordingTask.cancel()
+  }
+
   @Test func reconnectsAfterHostAndSocketFailureWithBoundedRetry() async throws {
     let probe = RecoveryProbe()
     let supervisor = AppServerSupervisor(
@@ -65,6 +95,11 @@ private actor RecoveryProbe {
 
   func disconnect() { connectionReady = false }
 
+  func dropRuntime() {
+    hostReady = false
+    connectionReady = false
+  }
+
   func failNextConnectionAndDropRuntime() {
     failuresRemaining = 1
     hostReady = false
@@ -74,6 +109,8 @@ private actor RecoveryProbe {
 
 private actor StateRecorder {
   private(set) var values: [AppServerSupervisorState] = []
+
+  var connectedCount: Int { values.filter { $0 == .connected }.count }
 
   func append(_ value: AppServerSupervisorState) { values.append(value) }
 }
