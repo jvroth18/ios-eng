@@ -7,11 +7,16 @@ import Testing
 /// Records outbound envelopes and lets a test inject inbound events without a radio.
 final class FakeBridgeClient: BridgeClientTransport, @unchecked Sendable {
   let kind = BridgeTransportKind.nearbyAuto
+  let identityPublicKey: Data?
   private let lock = NSLock()
   private var handler: (@Sendable (BridgeClientEvent) -> Void)?
   private var outbound: [BridgeEnvelope] = []
 
   var sent: [BridgeMessage] { lock.withLock { outbound.map(\.message) } }
+
+  init(identityPublicKey: Data? = nil) {
+    self.identityPublicKey = identityPublicKey
+  }
 
   func setEventHandler(_ handler: @escaping @Sendable (BridgeClientEvent) -> Void) {
     lock.withLock { self.handler = handler }
@@ -210,6 +215,23 @@ struct BridgeStoreTests {
       return request.code
     }
     #expect(codes == ["123456"])
+    _ = store
+  }
+
+  @Test func trustedReconnectCarriesTheTransportIdentityKey() async {
+    let identityKey = Data(repeating: 0x5A, count: 32)
+    let client = FakeBridgeClient(identityPublicKey: identityKey)
+    let store = BridgeStore(client: client, arguments: [])
+    client.emit(.state(.connected("Mac")))
+    await Task.yield()
+
+    let requests = client.sent.compactMap { message -> PairRequest? in
+      guard case .pair(let request) = message else { return nil }
+      return request
+    }
+    #expect(requests.count == 1)
+    #expect(requests.first?.code == "")
+    #expect(requests.first?.identityPublicKey == identityKey)
     _ = store
   }
 }

@@ -7,7 +7,8 @@ public actor BridgeCoordinator {
   private let telemetry: MacTelemetrySampler
   private let bridgeName: String
   private let statusHandler: @Sendable (String) -> Void
-  private let trustedDeviceHandler: @Sendable (UUID) throws -> Void
+  private let trustedDeviceHandler: @Sendable (UUID, Data?) throws -> Void
+  private let trustedIdentityValidator: @Sendable (UUID, Data) -> Bool
   private let transportRegistry: SecureTransportRegistry
   private var pairingGate: PairingGate
   private var pairedPeers = Set<String>()
@@ -30,7 +31,8 @@ public actor BridgeCoordinator {
     pairingGate: PairingGate = PairingGate(),
     transportRegistry: SecureTransportRegistry = SecureTransportRegistry(),
     bridgeName: String = Host.current().localizedName ?? "Mac",
-    trustedDeviceHandler: @escaping @Sendable (UUID) throws -> Void = { _ in },
+    trustedDeviceHandler: @escaping @Sendable (UUID, Data?) throws -> Void = { _, _ in },
+    trustedIdentityValidator: @escaping @Sendable (UUID, Data) -> Bool = { _, _ in true },
     statusHandler: @escaping @Sendable (String) -> Void = { _ in }
   ) {
     self.transport = transport
@@ -40,6 +42,7 @@ public actor BridgeCoordinator {
     self.transportRegistry = transportRegistry
     self.bridgeName = bridgeName
     self.trustedDeviceHandler = trustedDeviceHandler
+    self.trustedIdentityValidator = trustedIdentityValidator
     self.statusHandler = statusHandler
   }
 
@@ -114,25 +117,42 @@ public actor BridgeCoordinator {
     case .pair(let request):
       peerDevices[peer] = request.deviceID
       let wasTrusted = pairingGate.isPaired(deviceID: request.deviceID)
-      let result = pairingGate.validate(
-        code: request.code,
-        deviceID: request.deviceID,
-        bridgeName: bridgeName
+      statusHandler(
+        "Pair request from \(request.deviceName) included "
+          + "\(request.identityPublicKey?.count ?? 0) identity bytes."
       )
+      let identityMatches =
+        request.identityPublicKey.map {
+          trustedIdentityValidator(request.deviceID, $0)
+        } ?? !wasTrusted
+      let result =
+        identityMatches
+        ? pairingGate.validate(
+          code: request.code,
+          deviceID: request.deviceID,
+          bridgeName: bridgeName
+        )
+        : PairResult(
+          accepted: false,
+          bridgeName: bridgeName,
+          reason: "This iPhone identity does not match the remembered device."
+        )
       try? transport.send(BridgeEnvelope(message: .pairResult(result)), to: peer)
       if result.accepted {
-        if !wasTrusted {
-          do {
-            try trustedDeviceHandler(request.deviceID)
+        do {
+          try trustedDeviceHandler(request.deviceID, request.identityPublicKey)
+          if !wasTrusted {
             statusHandler("Remembered this iPhone for automatic reconnection.")
-          } catch {
-            statusHandler(
-              "Paired, but could not remember this iPhone: \(error.localizedDescription)")
           }
+        } catch {
+          statusHandler(
+            "Paired, but could not remember this iPhone: \(error.localizedDescription)")
         }
         pairedPeers.insert(peer)
+        let peerTransport = transport.kind(for: peer)
         statusHandler(
-          "Paired \(request.deviceName) over \(transport.kind.title) (\(transport.kind.securityLabel))."
+          "Paired \(request.deviceName) over \(peerTransport.title) "
+            + "(\(peerTransport.securityLabel))."
         )
         if let credential = try? transportCredential(for: request.deviceID) {
           try? transport.send(

@@ -56,6 +56,14 @@ public final class CompositeBridgeServer: @unchecked Sendable {
     }
     try transports[index].send(envelope, to: parts[1])
   }
+
+  public func kind(for peerName: String) -> BridgeTransportKind {
+    let parts = peerName.split(separator: ":", maxSplits: 1)
+    guard parts.count == 2, let index = Int(parts[0]), transports.indices.contains(index) else {
+      return kind
+    }
+    return transports[index].kind
+  }
 }
 
 extension CompositeBridgeServer: BridgeServerTransport {}

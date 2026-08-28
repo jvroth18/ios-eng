@@ -45,9 +45,14 @@ enum EngBridgeMain {
       let registry = SecureTransportRegistry()
       let trustStore = PairingTrustStore()
       let trustedDeviceIDs = trustStore.trustedDeviceIDs()
+      let directPairingKey = try trustStore.directPairingPrivateKey()
       let transport = CompositeBridgeServer([
         NearbyServer(),
-        WiFiServer(registry: registry),
+        WiFiServer(
+          registry: registry,
+          pairingKey: directPairingKey,
+          identityValidator: { trustStore.matchesIdentity(deviceID: $0, publicKey: $1) }
+        ),
       ])
       let coordinator = BridgeCoordinator(
         transport: transport,
@@ -57,7 +62,10 @@ enum EngBridgeMain {
           automaticallyTrustFirstDevice: true
         ),
         transportRegistry: registry,
-        trustedDeviceHandler: { try trustStore.trust($0) },
+        trustedDeviceHandler: { try trustStore.trust($0, identityPublicKey: $1) },
+        trustedIdentityValidator: {
+          trustStore.matchesIdentity(deviceID: $0, publicKey: $1)
+        },
         statusHandler: { message in
           FileHandle.standardOutput.write(Data("\(message)\n".utf8))
         }

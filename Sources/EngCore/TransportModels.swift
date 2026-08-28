@@ -16,7 +16,7 @@ public enum BridgeTransportKind: String, Codable, CaseIterable, Equatable, Senda
   public var securityLabel: String {
     switch self {
     case .nearbyAuto: "Apple encrypted session"
-    case .wifiDirect: "Pinned encrypted session"
+    case .wifiDirect: "Encrypted direct session"
     case .sshTunnel: "SSH host-key verified"
     }
   }
@@ -26,7 +26,7 @@ public enum BridgeTransportKind: String, Codable, CaseIterable, Equatable, Senda
     case .nearbyAuto:
       "Automatically uses Bluetooth, peer-to-peer Wi-Fi, or local Wi-Fi. Apple does not expose the selected bearer."
     case .wifiDirect:
-      "Prefers a low-latency local-network connection when the phone and Mac can reach each other."
+      "Uses Curve25519 key agreement and authenticated encryption over the fastest reachable local path."
     case .sshTunnel:
       "Carries the same bounded Eng protocol through a host-key-verified SSH connection."
     }

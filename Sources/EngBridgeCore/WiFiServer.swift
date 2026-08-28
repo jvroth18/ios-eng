@@ -1,3 +1,4 @@
+import CryptoKit
 import EngCore
 import Foundation
 @preconcurrency import Network
@@ -6,6 +7,8 @@ public final class WiFiServer: @unchecked Sendable {
   public static let serviceName = "ios-eng-fast"
 
   private let registry: SecureTransportRegistry
+  private let pairingKey: Curve25519.KeyAgreement.PrivateKey
+  private let identityValidator: @Sendable (UUID, Data) -> Bool
   private let queue = DispatchQueue(label: "dev.jvroth.eng.wifi-server")
   private let lock = NSLock()
   private var listener: NWListener?
@@ -15,8 +18,14 @@ public final class WiFiServer: @unchecked Sendable {
 
   public let kind = BridgeTransportKind.wifiDirect
 
-  public init(registry: SecureTransportRegistry) {
+  public init(
+    registry: SecureTransportRegistry,
+    pairingKey: Curve25519.KeyAgreement.PrivateKey = Curve25519.KeyAgreement.PrivateKey(),
+    identityValidator: @escaping @Sendable (UUID, Data) -> Bool = { _, _ in true }
+  ) {
     self.registry = registry
+    self.pairingKey = pairingKey
+    self.identityValidator = identityValidator
   }
 
   public func setHandlers(
@@ -95,6 +104,42 @@ public final class WiFiServer: @unchecked Sendable {
       var resolvedPeer = peerName
       do {
         for packetData in try nextBuffer.append(data ?? Data()) {
+          if resolvedPeer == nil {
+            let hello = try JSONDecoder.eng.decode(DirectPairingHello.self, from: packetData)
+            guard hello.protocolVersion == BridgeEnvelope.currentProtocolVersion else {
+              throw SecureTransportError.invalidPacket
+            }
+            guard identityValidator(hello.deviceID, hello.clientPublicKey) else {
+              throw SecureTransportError.invalidCredential
+            }
+            let now = Date()
+            let expiresAt = now.addingTimeInterval(12 * 60 * 60)
+            let bootstrap = try DirectPairingKeyAgreement.bootstrap(
+              deviceID: hello.deviceID,
+              privateKey: pairingKey,
+              remotePublicKey: hello.clientPublicKey,
+              issuedAt: now,
+              expiresAt: expiresAt
+            )
+            registry.install(bootstrap)
+            let response = DirectPairingResponse(
+              serverPublicKey: pairingKey.publicKey.rawRepresentation,
+              issuedAt: now,
+              expiresAt: expiresAt
+            )
+            let responseData = try JSONEncoder.eng.encode(response)
+            connection.send(
+              content: try NewlineFrameBuffer.encode(responseData),
+              completion: .contentProcessed { error in
+                if error != nil { connection.cancel() }
+              }
+            )
+            let name = "wifi:\(hello.deviceID.uuidString)"
+            resolvedPeer = name
+            lock.withLock { connections[name] = connection }
+            lock.withLock { stateHandler }?(name, .connected)
+            continue
+          }
           let packet = try JSONDecoder.eng.decode(SecureTransportPacket.self, from: packetData)
           guard let bootstrap = self.registry.credential(for: packet.deviceID) else {
             throw SecureTransportError.invalidCredential
@@ -143,5 +188,13 @@ extension JSONDecoder {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     return decoder
+  }
+}
+
+extension JSONEncoder {
+  fileprivate static var eng: JSONEncoder {
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    return encoder
   }
 }

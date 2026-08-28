@@ -55,6 +55,63 @@ public struct SecureTransportPacket: Codable, Equatable, Sendable {
   }
 }
 
+public struct DirectPairingHello: Codable, Equatable, Sendable {
+  public let deviceID: UUID
+  public let deviceName: String
+  public let protocolVersion: Int
+  public let clientPublicKey: Data
+
+  public init(
+    deviceID: UUID,
+    deviceName: String,
+    protocolVersion: Int = BridgeEnvelope.currentProtocolVersion,
+    clientPublicKey: Data
+  ) {
+    self.deviceID = deviceID
+    self.deviceName = deviceName
+    self.protocolVersion = protocolVersion
+    self.clientPublicKey = clientPublicKey
+  }
+}
+
+public struct DirectPairingResponse: Codable, Equatable, Sendable {
+  public let serverPublicKey: Data
+  public let issuedAt: Date
+  public let expiresAt: Date
+
+  public init(serverPublicKey: Data, issuedAt: Date, expiresAt: Date) {
+    self.serverPublicKey = serverPublicKey
+    self.issuedAt = issuedAt
+    self.expiresAt = expiresAt
+  }
+}
+
+public enum DirectPairingKeyAgreement {
+  public static func bootstrap(
+    deviceID: UUID,
+    privateKey: Curve25519.KeyAgreement.PrivateKey,
+    remotePublicKey: Data,
+    issuedAt: Date,
+    expiresAt: Date
+  ) throws -> TransportBootstrap {
+    let publicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: remotePublicKey)
+    let sharedSecret = try privateKey.sharedSecretFromKeyAgreement(with: publicKey)
+    let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
+      using: SHA256.self,
+      salt: Data("ios-eng-direct-v1".utf8),
+      sharedInfo: Data(deviceID.uuidString.lowercased().utf8),
+      outputByteCount: TransportBootstrap.secretByteCount
+    )
+    let secret = symmetricKey.withUnsafeBytes { Data($0) }
+    return try TransportBootstrap(
+      deviceID: deviceID,
+      secret: secret,
+      issuedAt: issuedAt,
+      expiresAt: expiresAt
+    )
+  }
+}
+
 public enum SecureTransportError: Error, Equatable, LocalizedError, Sendable {
   case invalidCredential
   case expiredCredential

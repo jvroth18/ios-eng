@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 
@@ -31,6 +32,31 @@ struct BridgeProtocolTests {
     #expect(throws: (any Error).self) {
       try SecureTransportCodec.open(tampered, using: credential, now: now)
     }
+  }
+
+  @Test func directPairingDerivesTheSameAuthenticatedCredentialOnBothDevices() throws {
+    let deviceID = UUID()
+    let phoneKey = Curve25519.KeyAgreement.PrivateKey()
+    let macKey = Curve25519.KeyAgreement.PrivateKey()
+    let issuedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let expiresAt = issuedAt.addingTimeInterval(600)
+
+    let phone = try DirectPairingKeyAgreement.bootstrap(
+      deviceID: deviceID,
+      privateKey: phoneKey,
+      remotePublicKey: macKey.publicKey.rawRepresentation,
+      issuedAt: issuedAt,
+      expiresAt: expiresAt
+    )
+    let mac = try DirectPairingKeyAgreement.bootstrap(
+      deviceID: deviceID,
+      privateKey: macKey,
+      remotePublicKey: phoneKey.publicKey.rawRepresentation,
+      issuedAt: issuedAt,
+      expiresAt: expiresAt
+    )
+
+    #expect(phone == mac)
   }
 
   @Test func secureTransportRejectsExpiredAndWrongDeviceCredentials() throws {

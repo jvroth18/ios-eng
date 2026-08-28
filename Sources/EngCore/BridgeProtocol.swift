@@ -188,11 +188,18 @@ public struct PairRequest: Codable, Equatable, Sendable {
   public let code: String
   public let deviceID: UUID
   public let deviceName: String
+  public let identityPublicKey: Data?
 
-  public init(code: String, deviceID: UUID, deviceName: String) {
+  public init(
+    code: String,
+    deviceID: UUID,
+    deviceName: String,
+    identityPublicKey: Data? = nil
+  ) {
     self.code = code
     self.deviceID = deviceID
     self.deviceName = deviceName
+    self.identityPublicKey = identityPublicKey
   }
 }
 

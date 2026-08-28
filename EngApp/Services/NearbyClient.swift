@@ -12,10 +12,12 @@ final class NearbyClient: NSObject, @unchecked Sendable {
   private let session: MCSession
   private let browser: MCNearbyServiceBrowser
   private let lock = NSLock()
+  private var isRunning = false
   private var invitedPeerNames = Set<String>()
   private var eventHandler: (@Sendable (BridgeClientEvent) -> Void)?
 
   let kind = BridgeTransportKind.nearbyAuto
+  let identityPublicKey: Data? = nil
 
   init(displayName: String) {
     let safeName = String("\(displayName) · Eng".prefix(60))
@@ -32,12 +34,19 @@ final class NearbyClient: NSObject, @unchecked Sendable {
   }
 
   func start() {
+    let shouldStart = lock.withLock { () -> Bool in
+      guard !isRunning else { return false }
+      isRunning = true
+      return true
+    }
+    guard shouldStart else { return }
     trace("Starting encrypted nearby browser for _\(Self.serviceType)._tcp")
     emit(.state(.searching))
     browser.startBrowsingForPeers()
   }
 
   func stop() {
+    lock.withLock { isRunning = false }
     trace("Stopping nearby browser and session")
     browser.stopBrowsingForPeers()
     session.disconnect()
@@ -87,11 +96,10 @@ extension NearbyClient: MCNearbyServiceBrowserDelegate {
     withDiscoveryInfo info: [String: String]?
   ) {
     let shouldInvite = lock.withLock {
-      invitedPeerNames.insert(peerID.displayName).inserted
+      isRunning && invitedPeerNames.insert(peerID.displayName).inserted
     }
     guard shouldInvite else { return }
     trace("Found Mac peer \(peerID.displayName); sending invitation")
-    browser.stopBrowsingForPeers()
     emit(.state(.connecting(peerID.displayName)))
     browser.invitePeer(peerID, to: session, withContext: nil, timeout: 12)
   }
@@ -115,12 +123,16 @@ extension NearbyClient: MCSessionDelegate {
     trace("Session with \(peerID.displayName) changed to \(state.rawValue)")
     switch state {
     case .notConnected:
-      _ = lock.withLock { invitedPeerNames.remove(peerID.displayName) }
+      let shouldRestart = lock.withLock { () -> Bool in
+        invitedPeerNames.remove(peerID.displayName)
+        return isRunning
+      }
+      guard shouldRestart else { return }
       emit(.state(.disconnected))
       browser.stopBrowsingForPeers()
       trace("Restarting nearby discovery after failed session")
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
-        guard let self else { return }
+        guard let self, self.lock.withLock({ self.isRunning }) else { return }
         self.emit(.state(.searching))
         self.browser.startBrowsingForPeers()
       }

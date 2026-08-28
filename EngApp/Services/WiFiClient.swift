@@ -1,9 +1,13 @@
+import CryptoKit
 import EngCore
 import Foundation
 @preconcurrency import Network
 
 final class WiFiClient: @unchecked Sendable {
   private let queue = DispatchQueue(label: "dev.jvroth.eng.wifi-client")
+  private let deviceID: UUID
+  private let deviceName: String
+  private let pairingKey: Curve25519.KeyAgreement.PrivateKey
   private let lock = NSLock()
   private var browser: NWBrowser?
   private var connection: NWConnection?
@@ -12,6 +16,14 @@ final class WiFiClient: @unchecked Sendable {
   private var isConnected = false
 
   let kind = BridgeTransportKind.wifiDirect
+
+  init(deviceID: UUID, deviceName: String) {
+    self.deviceID = deviceID
+    self.deviceName = deviceName
+    pairingKey = DeviceIdentityKey.loadOrCreate()
+  }
+
+  var identityPublicKey: Data? { pairingKey.publicKey.rawRepresentation }
 
   func setEventHandler(_ handler: @escaping @Sendable (BridgeClientEvent) -> Void) {
     lock.withLock { eventHandler = handler }
@@ -27,7 +39,8 @@ final class WiFiClient: @unchecked Sendable {
   }
 
   func start() {
-    guard lock.withLock({ bootstrap?.isValid() == true }) else { return }
+    let shouldStart = lock.withLock { self.browser == nil && connection == nil }
+    guard shouldStart else { return }
     let parameters = NWParameters.tcp
     parameters.includePeerToPeer = true
     let browser = NWBrowser(
@@ -82,19 +95,82 @@ final class WiFiClient: @unchecked Sendable {
       guard let self, let connection else { return }
       switch state {
       case .ready:
-        self.lock.withLock {
-          self.isConnected = true
-          self.browser?.cancel()
-          self.browser = nil
-        }
-        self.emit(.state(.connected("Mac · Direct Wi-Fi")))
-        self.receive(on: connection, buffer: NewlineFrameBuffer())
+        self.sendPairingHello(on: connection)
       case .failed(let error): self.disconnected(error.localizedDescription)
       case .cancelled: self.disconnected(nil)
       default: break
       }
     }
     connection.start(queue: queue)
+  }
+
+  private func sendPairingHello(on connection: NWConnection) {
+    do {
+      let hello = DirectPairingHello(
+        deviceID: deviceID,
+        deviceName: deviceName,
+        clientPublicKey: pairingKey.publicKey.rawRepresentation
+      )
+      let encoder = JSONEncoder()
+      encoder.dateEncodingStrategy = .iso8601
+      let frame = try NewlineFrameBuffer.encode(encoder.encode(hello))
+      connection.send(
+        content: frame,
+        completion: .contentProcessed { [weak self] error in
+          if let error { self?.disconnected(error.localizedDescription) }
+        })
+      receivePairingResponse(on: connection, buffer: NewlineFrameBuffer())
+    } catch {
+      disconnected(error.localizedDescription)
+    }
+  }
+
+  private func receivePairingResponse(on connection: NWConnection, buffer: NewlineFrameBuffer) {
+    connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1_024) {
+      [weak self, weak connection] data, _, complete, error in
+      guard let self, let connection else { return }
+      var nextBuffer = buffer
+      do {
+        let frames = try nextBuffer.append(data ?? Data())
+        guard let frame = frames.first else {
+          if complete || error != nil {
+            self.disconnected(error?.localizedDescription)
+          } else {
+            self.receivePairingResponse(on: connection, buffer: nextBuffer)
+          }
+          return
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(DirectPairingResponse.self, from: frame)
+        guard DeviceIdentityKey.acceptsServerPublicKey(response.serverPublicKey) else {
+          self.emit(
+            .state(
+              .failed(
+                "The Mac identity changed. Refusing the direct connection to protect your data."
+              )))
+          connection.cancel()
+          return
+        }
+        let bootstrap = try DirectPairingKeyAgreement.bootstrap(
+          deviceID: self.deviceID,
+          privateKey: self.pairingKey,
+          remotePublicKey: response.serverPublicKey,
+          issuedAt: response.issuedAt,
+          expiresAt: response.expiresAt
+        )
+        self.lock.withLock {
+          self.bootstrap = bootstrap
+          self.isConnected = true
+          self.browser?.cancel()
+          self.browser = nil
+        }
+        self.emit(.state(.connected("Mac · Direct Wi-Fi")))
+        self.receive(on: connection, buffer: NewlineFrameBuffer())
+      } catch {
+        connection.cancel()
+      }
+    }
   }
 
   private func receive(on connection: NWConnection, buffer: NewlineFrameBuffer) {
@@ -123,10 +199,12 @@ final class WiFiClient: @unchecked Sendable {
     let shouldRestart = lock.withLock { () -> Bool in
       isConnected = false
       connection = nil
-      return bootstrap?.isValid() == true
+      return true
     }
     emit(.state(reason.map(BridgeConnectionState.failed) ?? .disconnected))
-    if shouldRestart { start() }
+    if shouldRestart {
+      queue.asyncAfter(deadline: .now() + 0.75) { [weak self] in self?.start() }
+    }
   }
 
   private func emit(_ event: BridgeClientEvent) {

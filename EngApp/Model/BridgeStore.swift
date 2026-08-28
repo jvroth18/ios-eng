@@ -80,7 +80,9 @@ final class BridgeStore: ObservableObject {
       automaticPairingCode = nil
     }
     deviceID = Self.loadDeviceID()
-    self.client = client ?? AdaptiveBridgeClient(displayName: UIDevice.current.name)
+    self.client =
+      client
+      ?? AdaptiveBridgeClient(displayName: UIDevice.current.name, deviceID: deviceID)
     self.client.setEventHandler { [weak self] event in
       Task { @MainActor [weak self] in
         self?.handle(event)
@@ -147,7 +149,12 @@ final class BridgeStore: ObservableObject {
     }
     send(
       .pair(
-        PairRequest(code: code, deviceID: deviceID, deviceName: UIDevice.current.name)))
+        PairRequest(
+          code: code,
+          deviceID: deviceID,
+          deviceName: UIDevice.current.name,
+          identityPublicKey: client.identityPublicKey
+        )))
   }
 
   func refresh(threadID: String? = nil) {
@@ -414,9 +421,18 @@ final class BridgeStore: ObservableObject {
 
   private func attemptTrustedReconnect() {
     awaitingTrustedReconnect = true
+    let identityByteCount = client.identityPublicKey?.count ?? 0
+    FileHandle.standardError.write(
+      Data("[Eng Pairing] Sending \(identityByteCount)-byte device identity\n".utf8)
+    )
     send(
       .pair(
-        PairRequest(code: "", deviceID: deviceID, deviceName: UIDevice.current.name)))
+        PairRequest(
+          code: "",
+          deviceID: deviceID,
+          deviceName: UIDevice.current.name,
+          identityPublicKey: client.identityPublicKey
+        )))
   }
 
   private func send(_ message: BridgeMessage) {
