@@ -1,10 +1,12 @@
 import EngCore
 import Foundation
 @preconcurrency import MultipeerConnectivity
+import OSLog
 
 final class NearbyClient: NSObject, @unchecked Sendable {
   static let serviceType = "ios-eng"
   static let maximumFrameBytes = 2 * 1_024 * 1_024
+  private static let logger = Logger(subsystem: "dev.jvroth.eng", category: "Nearby")
 
   private let peerID: MCPeerID
   private let session: MCSession
@@ -30,11 +32,13 @@ final class NearbyClient: NSObject, @unchecked Sendable {
   }
 
   func start() {
+    trace("Starting encrypted nearby browser for _\(Self.serviceType)._tcp")
     emit(.state(.searching))
     browser.startBrowsingForPeers()
   }
 
   func stop() {
+    trace("Stopping nearby browser and session")
     browser.stopBrowsingForPeers()
     session.disconnect()
     lock.withLock { invitedPeerNames.removeAll() }
@@ -67,6 +71,11 @@ final class NearbyClient: NSObject, @unchecked Sendable {
     let handler = lock.withLock { eventHandler }
     handler?(event)
   }
+
+  private func trace(_ message: String) {
+    Self.logger.notice("\(message, privacy: .public)")
+    FileHandle.standardError.write(Data("[Eng Nearby] \(message)\n".utf8))
+  }
 }
 
 extension NearbyClient: BridgeClientTransport {}
@@ -81,11 +90,14 @@ extension NearbyClient: MCNearbyServiceBrowserDelegate {
       invitedPeerNames.insert(peerID.displayName).inserted
     }
     guard shouldInvite else { return }
+    trace("Found Mac peer \(peerID.displayName); sending invitation")
+    browser.stopBrowsingForPeers()
     emit(.state(.connecting(peerID.displayName)))
     browser.invitePeer(peerID, to: session, withContext: nil, timeout: 12)
   }
 
   func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
+    trace("Lost Mac peer \(peerID.displayName)")
     _ = lock.withLock { invitedPeerNames.remove(peerID.displayName) }
   }
 
@@ -93,17 +105,25 @@ extension NearbyClient: MCNearbyServiceBrowserDelegate {
     _ browser: MCNearbyServiceBrowser,
     didNotStartBrowsingForPeers error: any Error
   ) {
+    trace("Nearby browser failed: \(error.localizedDescription)")
     emit(.state(.failed(error.localizedDescription)))
   }
 }
 
 extension NearbyClient: MCSessionDelegate {
   func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
+    trace("Session with \(peerID.displayName) changed to \(state.rawValue)")
     switch state {
     case .notConnected:
       _ = lock.withLock { invitedPeerNames.remove(peerID.displayName) }
       emit(.state(.disconnected))
-      browser.startBrowsingForPeers()
+      browser.stopBrowsingForPeers()
+      trace("Restarting nearby discovery after failed session")
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
+        guard let self else { return }
+        self.emit(.state(.searching))
+        self.browser.startBrowsingForPeers()
+      }
     case .connecting:
       emit(.state(.connecting(peerID.displayName)))
     case .connected:
