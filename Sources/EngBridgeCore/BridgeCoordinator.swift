@@ -338,8 +338,10 @@ public actor BridgeCoordinator {
     case .notification(let method, let params):
       await service.recordNotification(method: method, params: params)
       if let item = CodexTimelineMapper.mapEvent(method: method, params: params) {
+        let projected = PhoneTimelineWindow.project([item], maximumItems: 1).first
         for (peer, threadID) in subscriptions where threadID == item.threadID {
-          try? transport.send(BridgeEnvelope(message: .timelineEvent(item)), to: peer)
+          guard let projected else { continue }
+          try? transport.send(BridgeEnvelope(message: .timelineEvent(projected)), to: peer)
         }
       }
       if method == "turn/started" || method == "turn/completed"

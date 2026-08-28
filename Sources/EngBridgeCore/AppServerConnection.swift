@@ -34,6 +34,8 @@ public struct AppServerFailure: Error, Equatable, Sendable, CustomStringConverti
 extension AppServerConnection: AppServerClient {}
 
 public actor AppServerConnection {
+  static let maximumInboundMessageBytes = 16 * 1_024 * 1_024
+
   public nonisolated let events: AsyncStream<AppServerInbound>
 
   private let eventContinuation: AsyncStream<AppServerInbound>.Continuation
@@ -58,6 +60,10 @@ public actor AppServerConnection {
   public func connect(to url: URL) async throws {
     guard socket == nil else { return }
     let socket = session.webSocketTask(with: url)
+    // Foundation defaults to a ceiling that is too small for legitimate Codex turns
+    // containing command output or diffs. The phone still receives a much smaller
+    // projection; this limit applies only to the loopback Mac connection.
+    socket.maximumMessageSize = Self.maximumInboundMessageBytes
     self.socket = socket
     socket.resume()
     receiveTask = Task { [weak self] in

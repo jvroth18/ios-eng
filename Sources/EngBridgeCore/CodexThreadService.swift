@@ -140,7 +140,10 @@ public actor CodexThreadService {
         "threadId": .string(threadID),
         "limit": 12,
         "sortDirection": "desc",
-        "itemsView": "full",
+        // Full persisted command output can exceed WebSocket message limits before
+        // Eng has a chance to project it for the phone. Summary retains the visible
+        // conversation/activity outline; live notifications supply current detail.
+        "itemsView": "summary",
       ]
     )
     let newestFirst = response["data"]?.arrayValue ?? []

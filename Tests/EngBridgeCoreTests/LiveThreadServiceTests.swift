@@ -26,7 +26,9 @@ struct LiveThreadServiceTests {
     #expect(detail.thread.controlLevel == .live)
     #expect(detail.thread.activeTurnID == "turn-1")
     let methods = await client.requestedMethods
+    let turnsRequest = await client.requestedRequests.first { $0.method == "thread/turns/list" }
     #expect(methods.contains("thread/resume"))
+    #expect(turnsRequest?.params["itemsView"]?.stringValue == "summary")
     #expect(!methods.contains("thread/start"))
     #expect(!methods.contains("thread/delete"))
     #expect(!methods.contains("thread/archive"))
@@ -258,6 +260,7 @@ private actor MockAppServerClient: AppServerClient {
   nonisolated let events: AsyncStream<AppServerInbound>
   private var responses: [String: [Result<JSONValue, AppServerFailure>]] = [:]
   private(set) var requestedMethods: [String] = []
+  private(set) var requestedRequests: [(method: String, params: JSONValue)] = []
 
   init() {
     events = AsyncStream { $0.finish() }
@@ -273,6 +276,7 @@ private actor MockAppServerClient: AppServerClient {
 
   func request(method: String, params: JSONValue) throws -> JSONValue {
     requestedMethods.append(method)
+    requestedRequests.append((method, params))
     guard var values = responses[method], !values.isEmpty else {
       throw AppServerFailure(message: "No mock response for \(method)")
     }
