@@ -43,6 +43,9 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - Thread rows show a two-line request/activity summary. Once a thread has streamed, its observable current operation such as Thinking, Running command, or Writing response replaces the request fallback.
 - Thread timestamps are explicitly labeled as last updated. Active work separately says Live now; no elapsed-open duration is inferred.
 - iOS does not expose a public app control for USB data with charging disabled. Eng changes its data route only and points users to the system Charge Limit setting where supported.
+- Desktop companion 3.7 (build 10) was installed with the bridge hash matching the current release build. Its App Server returned HTTP 200 from both `/readyz` and `/healthz` on fresh port 51231.
+- Eng 0.4.0 reconnected from the physical iPhone over the encrypted direct-local route, reported nominal thermal state and Wi-Fi diagnostics, and measured the 64 KB bridge probe at 70.5 ms round trip and 1.86 MB/s payload goodput.
+- The post-launch log window refreshed 911 threads across 170 projects without another active-writer error. Quitting the preceding desktop build removed its bridge wrapper, Node child, native App Server, runtime record, and listener on port 49577 before the next launch.
 
 ## Live Codex mirror
 
