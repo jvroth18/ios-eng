@@ -13,6 +13,12 @@ settings:
     DEVELOPMENT_TEAM: 585XAFGPDN
     CODE_SIGN_STYLE: Automatic
 
+# EngCore is consumed as the local SwiftPM product so the app and the Mac bridge
+# compile exactly the same module instead of the app re-compiling its sources.
+packages:
+  ios-eng:
+    path: .
+
 targets:
   Eng:
     type: application
@@ -21,7 +27,9 @@ targets:
       - path: EngApp
         excludes:
           - Info.plist
-      - path: Sources/EngCore
+    dependencies:
+      - package: ios-eng
+        product: EngCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jvroth.eng
@@ -59,6 +67,8 @@ targets:
       - path: EngAppTests
     dependencies:
       - target: Eng
+      - package: ios-eng
+        product: EngCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jvroth.eng.tests

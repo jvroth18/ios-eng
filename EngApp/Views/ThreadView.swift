@@ -1,3 +1,4 @@
+import EngCore
 import SwiftUI
 
 struct ThreadView: View {

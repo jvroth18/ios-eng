@@ -1,3 +1,4 @@
+import EngCore
 import Foundation
 
 final class AdaptiveBridgeClient: @unchecked Sendable {

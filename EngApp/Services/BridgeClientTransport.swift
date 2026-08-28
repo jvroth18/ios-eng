@@ -1,3 +1,4 @@
+import EngCore
 import Foundation
 
 enum BridgeConnectionState: Equatable, Sendable {

@@ -1,15 +1,30 @@
+import EngCore
 import SwiftUI
 
 struct RootView: View {
   @EnvironmentObject private var store: BridgeStore
-  @State private var selectedTab: EngTab =
-    ProcessInfo.processInfo.arguments.contains("-eng-analytics") ? .analytics : .projects
+  @State private var selectedTab: EngTab = Self.initialTab
+
+  private static var initialTab: EngTab {
+    #if DEBUG
+      if ProcessInfo.processInfo.arguments.contains("-eng-analytics") { return .analytics }
+    #endif
+    return .projects
+  }
+
+  private static var showsDemoThread: Bool {
+    #if DEBUG
+      ProcessInfo.processInfo.arguments.contains("-eng-thread")
+    #else
+      false
+    #endif
+  }
 
   var body: some View {
     ZStack {
       EngCanvas()
       if store.isPaired {
-        if ProcessInfo.processInfo.arguments.contains("-eng-thread"),
+        if Self.showsDemoThread,
           let thread = store.projects.first?.threads.first
         {
           NavigationStack { ThreadView(thread: thread) }

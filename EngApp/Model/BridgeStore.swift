@@ -1,3 +1,4 @@
+import EngCore
 import Foundation
 import UIKit
 
@@ -56,11 +57,17 @@ final class BridgeStore: ObservableObject {
   private var pendingPings: [UInt64: Date] = [:]
   private var latestPhoneSample: PhoneTelemetrySample?
   private var secureTransportBootstrap: TransportBootstrap?
+  private var selectedThreadID: String?
   private var pendingWorkspaceID: UUID?
   private var pendingWorkspacePages: [Int: WorkspacePage] = [:]
 
-  init() {
-    let arguments = ProcessInfo.processInfo.arguments
+  convenience init() {
+    self.init(client: nil, arguments: ProcessInfo.processInfo.arguments)
+  }
+
+  /// `client` defaults to the adaptive nearby/Wi-Fi transport. Tests inject a fake
+  /// so store logic (paging, timeline merging, link probes) runs without radios.
+  init(client: (any BridgeClientTransport)?, arguments: [String]) {
     demoMode = arguments.contains("-eng-demo")
     if let index = arguments.firstIndex(of: "-eng-pair-code"),
       arguments.indices.contains(index + 1)
@@ -70,8 +77,8 @@ final class BridgeStore: ObservableObject {
       automaticPairingCode = nil
     }
     deviceID = Self.loadDeviceID()
-    client = AdaptiveBridgeClient(displayName: UIDevice.current.name)
-    client.setEventHandler { [weak self] event in
+    self.client = client ?? AdaptiveBridgeClient(displayName: UIDevice.current.name)
+    self.client.setEventHandler { [weak self] event in
       Task { @MainActor [weak self] in
         self?.handle(event)
       }
@@ -153,6 +160,7 @@ final class BridgeStore: ObservableObject {
       return
     }
     threadDetail = nil
+    selectedThreadID = thread.id
     send(.subscribe(ThreadSubscription(threadID: thread.id)))
   }
 
@@ -207,11 +215,11 @@ final class BridgeStore: ObservableObject {
         )
       }
     case .envelope(let envelope):
-      handle(envelope)
+      receive(envelope)
     }
   }
 
-  private func handle(_ envelope: BridgeEnvelope) {
+  func receive(_ envelope: BridgeEnvelope) {
     switch envelope.message {
     case .pairResult(let result):
       bridgeName = result.bridgeName
@@ -221,6 +229,9 @@ final class BridgeStore: ObservableObject {
         presentedError = nil
         refresh()
         sendPing()
+        if let selectedThreadID {
+          send(.subscribe(ThreadSubscription(threadID: selectedThreadID)))
+        }
       } else if let reason = result.reason {
         presentedError = BridgeError(
           code: "pairing_required",
@@ -278,7 +289,13 @@ final class BridgeStore: ObservableObject {
     guard var detail = threadDetail, detail.thread.id == item.threadID else { return }
     var timeline = detail.timeline
 
-    if let index = timeline.firstIndex(where: { $0.id == item.id }) {
+    if item.state != .running,
+      let index = timeline.lastIndex(where: {
+        $0.state == .running && $0.kind == item.kind && $0.turnID == item.turnID
+      })
+    {
+      timeline[index] = item
+    } else if let index = timeline.firstIndex(where: { $0.id == item.id }) {
       timeline[index] = item
     } else if item.state == .running,
       let last = timeline.last,
@@ -329,7 +346,7 @@ final class BridgeStore: ObservableObject {
     send(.analytics(AnalyticsSnapshot(phone: sample.telemetry, mac: nil, link: link)))
   }
 
-  private func sendPing() {
+  func sendPing() {
     guard isPaired else { return }
     pingSequence &+= 1
     let now = Date()

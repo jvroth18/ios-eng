@@ -12,6 +12,11 @@ public final class NearbyServer: NSObject, @unchecked Sendable {
   private let lock = NSLock()
   private var envelopeHandler: (@Sendable (String, BridgeEnvelope) -> Void)?
   private var stateHandler: (@Sendable (String, BridgeTransportPeerState) -> Void)?
+  // Peer names handed to the coordinator must be unique per connection. Two iPhones
+  // with the same display name would otherwise share one pairing/subscription slot,
+  // so each MCPeerID gets a process-unique suffix on first sight.
+  private var peerNames: [MCPeerID: String] = [:]
+  private var peerSequence = 0
 
   public let kind = BridgeTransportKind.nearbyAuto
 
@@ -53,11 +58,11 @@ public final class NearbyServer: NSObject, @unchecked Sendable {
   }
 
   public var connectedPeerNames: [String] {
-    session.connectedPeers.map(\.displayName)
+    session.connectedPeers.map(name(for:))
   }
 
   public func send(_ envelope: BridgeEnvelope, to peerName: String) throws {
-    let peers = session.connectedPeers.filter { $0.displayName == peerName }
+    let peers = session.connectedPeers.filter { name(for: $0) == peerName }
     guard !peers.isEmpty else {
       throw BridgeError(
         code: "peer_disconnected",
@@ -76,6 +81,20 @@ public final class NearbyServer: NSObject, @unchecked Sendable {
       )
     }
     try session.send(data, toPeers: peers, with: .reliable)
+  }
+
+  private func name(for peer: MCPeerID) -> String {
+    lock.withLock {
+      if let name = peerNames[peer] { return name }
+      peerSequence += 1
+      let name = "\(peer.displayName)#\(peerSequence)"
+      peerNames[peer] = name
+      return name
+    }
+  }
+
+  private func forget(_ peer: MCPeerID) {
+    _ = lock.withLock { peerNames.removeValue(forKey: peer) }
   }
 }
 
@@ -113,7 +132,9 @@ extension NearbyServer: MCSessionDelegate {
     case .connected: transportState = .connected
     @unknown default: transportState = .disconnected
     }
-    handler?(peerID.displayName, transportState)
+    let name = name(for: peerID)
+    handler?(name, transportState)
+    if transportState == .disconnected { forget(peerID) }
   }
 
   public func session(
@@ -126,7 +147,7 @@ extension NearbyServer: MCSessionDelegate {
     decoder.dateDecodingStrategy = .iso8601
     guard let envelope = try? decoder.decode(BridgeEnvelope.self, from: data) else { return }
     let handler = lock.withLock { envelopeHandler }
-    handler?(peerID.displayName, envelope)
+    handler?(name(for: peerID), envelope)
   }
 
   public func session(
