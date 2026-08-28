@@ -109,15 +109,16 @@ struct ProjectsView: View {
           }
         }
         guard !threads.isEmpty || (needle.isEmpty && !activeOnly) else { return nil }
-        let sorted = threads.sorted { $0.updatedAt > $1.updatedAt }
-        return ProjectEntry(project: project, threads: sorted)
+        return ProjectEntry(project: project, threads: threads)
       }
-      .sorted {
-        let lhsPinned = store.isProjectPinned($0.id)
-        let rhsPinned = store.isProjectPinned($1.id)
+      .enumerated()
+      .sorted { lhs, rhs in
+        let lhsPinned = store.isProjectPinned(lhs.element.id)
+        let rhsPinned = store.isProjectPinned(rhs.element.id)
         if lhsPinned != rhsPinned { return lhsPinned && !rhsPinned }
-        return $0.latestActivity > $1.latestActivity
+        return lhs.offset < rhs.offset
       }
+      .map(\.element)
   }
 
   private func toggle(_ id: String, in set: inout Set<String>) {
@@ -130,9 +131,6 @@ private struct ProjectEntry: Identifiable {
   let threads: [ThreadSummary]
 
   var id: String { project.id }
-  var latestActivity: Date {
-    threads.map(\.updatedAt).max() ?? project.updatedAt
-  }
 }
 
 private struct ProjectNode: View {

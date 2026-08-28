@@ -334,7 +334,7 @@ final class BridgeStore: ObservableObject {
       secureTransportBootstrap = bootstrap
       client.install(bootstrap)
     case .workspaceSnapshot(let snapshot):
-      workspace = snapshot
+      applyWorkspace(snapshot)
       pendingWorkspaceID = nil
       pendingWorkspacePages = [:]
     case .workspacePage(let page):
@@ -372,9 +372,13 @@ final class BridgeStore: ObservableObject {
     guard
       let snapshot = WorkspacePager.assemble(Array(pendingWorkspacePages.values))
     else { return }
-    workspace = snapshot
+    applyWorkspace(snapshot)
     pendingWorkspaceID = nil
     pendingWorkspacePages = [:]
+  }
+
+  private func applyWorkspace(_ snapshot: WorkspaceSnapshot) {
+    workspace = WorkspaceOrderStabilizer.apply(snapshot, preserving: workspace)
   }
 
   private func mergeTimelineEvent(_ item: TimelineItem) {
