@@ -15,6 +15,10 @@ enum EngBridgeMain {
 
     do {
       try await supervisor.start()
+      let runtimeState = BridgeRuntimeState()
+      let runtimeRecord = BridgeRuntimeRecord(port: port, bridgePID: getpid())
+      try runtimeState.publish(runtimeRecord)
+      defer { runtimeState.clear(ifOwnedBy: runtimeRecord.bridgePID) }
       let service = CodexThreadService(connection: connection)
 
       if smoke {

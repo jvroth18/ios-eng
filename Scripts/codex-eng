@@ -1,7 +1,25 @@
 #!/bin/zsh
 set -euo pipefail
 
-eng_port="${IOS_ENG_CODEX_PORT:-47321}"
+eng_runtime_file="${IOS_ENG_RUNTIME_FILE:-$HOME/Library/Application Support/EngBridge/runtime.json}"
+
+if [[ -n "${IOS_ENG_CODEX_PORT:-}" ]]; then
+  eng_port="$IOS_ENG_CODEX_PORT"
+elif [[ -f "$eng_runtime_file" ]]; then
+  eng_port="$(/usr/bin/plutil -extract port raw "$eng_runtime_file" 2>/dev/null || true)"
+  eng_bridge_pid="$(/usr/bin/plutil -extract bridgePID raw "$eng_runtime_file" 2>/dev/null || true)"
+  if [[ -z "$eng_port" || -z "$eng_bridge_pid" ]]; then
+    print -u2 "Eng Bridge runtime state is invalid: $eng_runtime_file"
+    exit 1
+  fi
+  if ! kill -0 "$eng_bridge_pid" 2>/dev/null; then
+    print -u2 "Eng Bridge runtime state is stale (bridge PID $eng_bridge_pid is not running)."
+    print -u2 "Restart Amphetamine Switch or eng-bridge."
+    exit 1
+  fi
+else
+  eng_port=47321
+fi
 eng_ready_url="http://127.0.0.1:${eng_port}/readyz"
 
 if ! /usr/bin/curl --silent --fail --max-time 1 "$eng_ready_url" >/dev/null; then
@@ -11,4 +29,3 @@ if ! /usr/bin/curl --silent --fail --max-time 1 "$eng_ready_url" >/dev/null; the
 fi
 
 exec codex --remote "ws://127.0.0.1:${eng_port}" "$@"
-

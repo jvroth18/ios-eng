@@ -57,6 +57,11 @@ The generated Xcode project is intentionally ignored; `project.yml` is its sourc
 
 The first phone opened during the bridge pairing window is remembered automatically. The short Mac-terminal code remains available for a replacement phone; normal reconnects do not require it. For USB-C, enable iPhone Personal Hotspot and connect the trusted cable so Apple exposes an `iPhone USB` network interface to Network Framework. Analytics retains only the most recent 90 in-memory samples per device. Exact iPhone temperature is not available through Apple’s public API, so Eng reports `ProcessInfo.thermalState` categories instead of degrees.
 
+The running bridge publishes its owned loopback port and process identifier to
+`~/Library/Application Support/EngBridge/runtime.json`. `Scripts/codex-eng`
+uses that state instead of assuming port 47321, rejects stale ownership records,
+and still honors an explicit `IOS_ENG_CODEX_PORT` override.
+
 ## Privacy
 
 Eng is local-first. It does not contain an OpenAI API key, copy Codex authentication to the phone, or expose Codex App Server. Its Bonjour TCP listener performs Curve25519 key agreement, pins both device identities, and accepts only authenticated AES-GCM frames. Diagnostic history is short-lived and remains on the two devices.
