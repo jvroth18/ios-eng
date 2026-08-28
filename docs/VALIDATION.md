@@ -5,13 +5,13 @@ Validated on August 27, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 ## Contracts and unit coverage
 
 - `swift format lint --strict` passes across app, bridge, shared sources, tests, and scripts.
-- `swift test` passes 18 tests in 6 suites.
-- Coverage includes protocol round trips, encrypted-pairing gates, Git-root grouping, App Server event and request mapping, public Mac telemetry, link classification, a real 64 KB probe payload, and lossless workspace paging.
+- `swift test` passes 30 tests in 9 suites.
+- Coverage includes protocol round trips, encrypted-pairing gates, Git-root grouping, App Server event and request mapping, public Mac telemetry, link classification, a real 64 KB probe payload, lossless workspace paging, App Server supervision, subscription recovery, active-turn steering, idle existing-thread turns, and the phone command allowlist.
 - The paging stress fixture carries 245 threads, keeps every encoded frame below the Multipeer Connectivity resource ceiling, and reassembles without loss.
 
 ## Native app build and installation
 
-- Xcode simulator tests pass 2 presentation tests in 1 suite on iPhone 17 Pro.
+- Xcode simulator tests pass 10 tests with 0 failures on iPhone 17 Pro.
 - A Release `iphoneos` build succeeds with Apple Development signing and automatic provisioning for bundle `dev.jvroth.eng`.
 - The exact Release artifact installs on the paired physical iPhone as `Eng` version `0.1.0` (build `1`).
 - `devicectl` launches the installed bundle and reads back its live `/Eng.app/Eng` process.
@@ -19,13 +19,21 @@ Validated on August 27, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 ## Live Codex mirror
 
 - The bridge starts the installed Codex App Server on loopback and discovers the complete paginated history, not a fixed first-page sample.
-- The latest full scan grouped 893 threads into 165 repository projects and transferred them in 9 bounded workspace frames.
+- The latest repair-validation scan grouped 895 threads into 165 repository projects and transferred them in 9 bounded workspace frames.
 - A CLI session created through `Scripts/codex-eng` appeared under the `ios-eng` repository in the phone UI.
 - CLI-to-phone streaming was verified with `CLI_MIRROR_READY`.
 - Phone-to-CLI turn creation was verified with `PHONE_TO_CLI_OK` and read back in the CLI.
 - Active-turn steering was verified from the phone with `STEER_FROM_PHONE` in the same CLI turn.
 - Active-turn interrupt was invoked from the phone while a 120-second shell command was running. The CLI reported `Conversation interrupted`, the command process ended, and the forbidden completion response was not produced.
 - Choice and free-form App Server input requests are both represented by the shared protocol and phone UI. Approval responses preserve the originating JSON-RPC request identifier.
+
+## August 27 live-stream repair
+
+- A two-client probe created a Mac-side test thread, completed its first turn, resumed the existing thread from an independent App Server connection, and then started a second turn from the creator.
+- The subscriber received 13 matching notifications, including `turn/started`, `item/started`, `item/completed`, `item/agentMessage/delta`, and `turn/completed`; the delta stream contained `LIVE_STREAM_OK`. The exact test thread was archived afterward.
+- Terminating only the bridge-owned App Server child left the bridge running. The supervisor started a replacement child, and both loopback `/readyz` and `/healthz` returned HTTP 200.
+- Unit tests prove that phone selection invokes `thread/resume`, reconnect restores desired subscriptions, an active existing turn uses `turn/steer`, and an idle existing thread uses `turn/start` without ever invoking `thread/start`.
+- Policy tests prove that phone messages cannot create, fork, archive, or delete a thread and cannot invoke arbitrary App Server methods.
 
 ## Analytics and product QA
 
