@@ -17,7 +17,7 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - The configuration release `Eng` version `0.4.0` (build `4`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as a live `/Eng.app/Eng` process.
 - The oversized-thread repair release `Eng` version `0.4.1` (build `5`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back at its new `/Eng.app/Eng` installation path.
 - The live-activity release `Eng` version `0.5.0` (build `6`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as the live `/Eng.app/Eng` process.
-- The full-screen conversation and unread-indicator release candidate is `Eng` version `0.5.1` (build `7`).
+- The full-screen conversation and unread-indicator release `Eng` version `0.5.1` (build `7`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as the live `/Eng.app/Eng` process.
 
 ## August 28 full-screen conversation, formatting, and unread activity
 
@@ -26,6 +26,7 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - Unread tests prove that the first workspace establishes a baseline, a newer background timestamp marks only that thread, visible activity stays read, activity after dismissal becomes unread, opening clears the state, and unread UUIDs persist across store instances.
 - Visual simulator QA confirmed the full-screen conversation layout and its formatted heading, bold text, bullet list, and code block. A separate project render confirmed the in-app banner, Projects tab count, status count, project count, and exact thread `NEW` badge without obscuring the title bar.
 - The iPhone simulator passes 30 tests with 0 failures.
+- The physical iPhone reconnected to desktop companion 3.9 over an encrypted direct-local session. A fresh relaunch-scoped log window contained the successful identity-bearing pair exchange and no message-too-long, not-connected, thread-store-conflict, pairing-rejection, bridge-failure, or reconnect-loop error. The bridge remained healthy on port 60388 with HTTP 200 readiness and health checks.
 - `devicectl` launches the installed bundle and reads back its live `/Eng.app/Eng` process.
 
 ## August 28 Codex activity mirror
