@@ -7,6 +7,7 @@ struct ProjectsView: View {
   @State private var activeOnly = false
   @State private var collapsedProjects: Set<String> = []
   @State private var expandedProjects: Set<String> = []
+  @State private var presentedThread: ThreadSummary?
 
   /// Threads shown per project before the "more" row appears.
   static let previewThreadLimit = 6
@@ -46,7 +47,8 @@ struct ProjectsView: View {
                 pinned: store.isProjectPinned(entry.project.id),
                 onToggleCollapse: { toggle(entry.project.id, in: &collapsedProjects) },
                 onToggleShowAll: { toggle(entry.project.id, in: &expandedProjects) },
-                onTogglePin: { store.toggleProjectPin(entry.project.id) }
+                onTogglePin: { store.toggleProjectPin(entry.project.id) },
+                onOpenThread: { presentedThread = $0 }
               )
             }
           }
@@ -57,6 +59,9 @@ struct ProjectsView: View {
       .refreshable { store.refresh() }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .sunkenPaper()
+    }
+    .fullScreenCover(item: $presentedThread) { thread in
+      ThreadView(thread: thread)
     }
   }
 
@@ -142,6 +147,7 @@ private struct ProjectNode: View {
   let onToggleCollapse: () -> Void
   let onToggleShowAll: () -> Void
   let onTogglePin: () -> Void
+  let onOpenThread: (ThreadSummary) -> Void
 
   private var visibleThreads: ArraySlice<ThreadSummary> {
     showsAll ? threads[...] : threads.prefix(ProjectsView.previewThreadLimit)
@@ -191,8 +197,8 @@ private struct ProjectNode: View {
 
       if !collapsed {
         ForEach(visibleThreads) { thread in
-          NavigationLink {
-            ThreadView(thread: thread)
+          Button {
+            onOpenThread(thread)
           } label: {
             ThreadRow(thread: thread)
           }

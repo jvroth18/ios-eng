@@ -152,7 +152,18 @@ import Foundation
           state: .running,
           title: "Codex",
           body:
-            "The native app is compiling cleanly. I’m checking the analytics layout on a real device now…",
+            """
+            ## Device validation
+
+            The native app is **compiling cleanly**.
+
+            - Simulator tests passed
+            - Signed iPhone build passed
+
+            ```swift
+            let status = "ready"
+            ```
+            """,
           timestamp: now.addingTimeInterval(-8)
         ),
       ],

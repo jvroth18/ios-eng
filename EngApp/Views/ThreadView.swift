@@ -16,7 +16,6 @@ struct ThreadView: View {
       Win95Window(title: displayedThread.title, icon: "doc.text.fill", onClose: { dismiss() }) {
         VStack(spacing: 5) {
           toolbar
-          contextBox
           if let activity {
             activityBar(activity)
           }
@@ -97,30 +96,6 @@ struct ThreadView: View {
       .padding(.horizontal, 6)
       .padding(.vertical, 4)
       .bevel(.status)
-    }
-  }
-
-  private var contextBox: some View {
-    Win95GroupBox(title: "Thread") {
-      VStack(alignment: .leading, spacing: 4) {
-        HStack(spacing: 5) {
-          Image(systemName: displayedThread.controlLevel.presentationSymbol)
-            .font(.system(size: 10))
-          Text(controlHint)
-        }
-        .font(Win95Font.small)
-        .foregroundStyle(Win95.text)
-        Text(displayedThread.cwd)
-          .font(Win95Font.monoSmall)
-          .foregroundStyle(Win95.text)
-          .lineLimit(2)
-          .truncationMode(.head)
-        Text(
-          "Updated \(displayedThread.updatedAt.formatted(.relative(presentation: .named)))"
-        )
-        .font(Win95Font.small)
-        .foregroundStyle(Win95.shadow)
-      }
     }
   }
 
@@ -242,16 +217,6 @@ struct ThreadView: View {
     return displayedThread.activeTurnID == nil ? "Send" : "Steer"
   }
 
-  private var controlHint: String {
-    switch displayedThread.controlLevel {
-    case .live:
-      displayedThread.activeTurnID == nil
-        ? "Live — starts a new turn in this existing thread"
-        : "Live — steers the active turn"
-    case .message: "Connecting this existing thread for live control"
-    case .observe: "Mac Live — following activity; messages queue into the Mac session"
-    }
-  }
 }
 
 private struct TimelineRow: View {
@@ -293,10 +258,7 @@ private struct MessageLine: View {
             .foregroundStyle(Win95.ledRed)
         }
       }
-      Text(item.body.isEmpty ? "…" : item.body)
-        .font(Win95Font.body)
-        .textSelection(.enabled)
-        .fixedSize(horizontal: false, vertical: true)
+      FormattedMessageBody(text: item.body.isEmpty ? "…" : item.body)
     }
     .foregroundStyle(isUser ? Win95.highlightText : Win95.text)
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -308,6 +270,68 @@ private struct MessageLine: View {
   private var messageAuthor: String {
     if isUser { return "You" }
     return item.assistantPhase == .commentary ? "Codex update" : "Codex"
+  }
+}
+
+private struct FormattedMessageBody: View {
+  let text: String
+
+  private var blocks: [ThreadMessageBlock] { ThreadMessageFormatter.blocks(from: text) }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 7) {
+      ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+        blockView(block)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .textSelection(.enabled)
+    .fixedSize(horizontal: false, vertical: true)
+  }
+
+  @ViewBuilder
+  private func blockView(_ block: ThreadMessageBlock) -> some View {
+    switch block {
+    case .paragraph(let value):
+      inlineMarkdown(value).font(Win95Font.body)
+    case .heading(let level, let value):
+      inlineMarkdown(value)
+        .font(level == 1 ? .system(size: 17, weight: .bold) : Win95Font.bold)
+    case .bullet(let value):
+      HStack(alignment: .firstTextBaseline, spacing: 7) {
+        Text("•").font(Win95Font.bold)
+        inlineMarkdown(value).font(Win95Font.body)
+      }
+    case .numbered(let marker, let value):
+      HStack(alignment: .firstTextBaseline, spacing: 7) {
+        Text(marker).font(Win95Font.bold)
+        inlineMarkdown(value).font(Win95Font.body)
+      }
+    case .quote(let value):
+      HStack(alignment: .top, spacing: 7) {
+        Rectangle().fill(Win95.shadow).frame(width: 3)
+        inlineMarkdown(value).font(Win95Font.body).italic()
+      }
+    case .code(_, let value):
+      ScrollView(.horizontal) {
+        Text(value)
+          .font(Win95Font.mono)
+          .foregroundStyle(Win95.text)
+          .padding(7)
+      }
+      .scrollIndicators(.hidden)
+      .bevel(.sunken)
+      .accessibilityLabel("Code block")
+    }
+  }
+
+  private func inlineMarkdown(_ value: String) -> Text {
+    guard
+      let attributed = try? AttributedString(
+        markdown: value,
+        options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+    else { return Text(value) }
+    return Text(attributed)
   }
 }
 
