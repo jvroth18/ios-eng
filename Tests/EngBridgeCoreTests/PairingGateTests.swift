@@ -29,4 +29,22 @@ struct PairingGateTests {
       #expect(code.allSatisfy { $0.isNumber })
     }
   }
+
+  @Test func automaticallyTrustsOnlyTheFirstDeviceInsideThePairingWindow() {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let first = UUID()
+    let second = UUID()
+    var gate = PairingGate(
+      code: "123456",
+      createdAt: now,
+      lifetime: 60,
+      automaticallyTrustFirstDevice: true
+    )
+
+    #expect(gate.validate(code: "", deviceID: first, bridgeName: "Mac", now: now).accepted)
+    #expect(gate.validate(code: "", deviceID: first, bridgeName: "Mac", now: now).accepted)
+    #expect(!gate.validate(code: "", deviceID: second, bridgeName: "Mac", now: now).accepted)
+    #expect(
+      gate.validate(code: "123456", deviceID: second, bridgeName: "Mac", now: now).accepted)
+  }
 }

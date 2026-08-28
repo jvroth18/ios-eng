@@ -43,6 +43,8 @@ enum EngBridgeMain {
       }
 
       let registry = SecureTransportRegistry()
+      let trustStore = PairingTrustStore()
+      let trustedDeviceIDs = trustStore.trustedDeviceIDs()
       let transport = CompositeBridgeServer([
         NearbyServer(),
         WiFiServer(registry: registry),
@@ -50,7 +52,12 @@ enum EngBridgeMain {
       let coordinator = BridgeCoordinator(
         transport: transport,
         service: service,
+        pairingGate: PairingGate(
+          pairedDeviceIDs: trustedDeviceIDs,
+          automaticallyTrustFirstDevice: true
+        ),
         transportRegistry: registry,
+        trustedDeviceHandler: { try trustStore.trust($0) },
         statusHandler: { message in
           FileHandle.standardOutput.write(Data("\(message)\n".utf8))
         }
@@ -73,8 +80,13 @@ enum EngBridgeMain {
       let code = await coordinator.pairingCode
       let expiration = await coordinator.pairingExpiration
       print("\nEng Bridge is ready")
-      print("Pairing code: \(code)")
-      print("Code expires: \(expiration.formatted(date: .omitted, time: .shortened))")
+      if trustedDeviceIDs.isEmpty {
+        print("The first nearby iPhone will connect automatically.")
+      } else {
+        print("Remembered iPhones will reconnect automatically.")
+      }
+      print("Replacement-phone pairing code: \(code)")
+      print("Fallback code expires: \(expiration.formatted(date: .omitted, time: .shortened))")
       print("Connected Codex CLI command:")
       print("  ./Scripts/codex-eng")
       print("Press Control-C to stop.\n")

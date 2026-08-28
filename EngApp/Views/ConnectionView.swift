@@ -57,23 +57,24 @@ struct ConnectionView: View {
               }
             }
 
-            if store.isConnected {
-              Win95GroupBox(title: "Pairing code") {
-                VStack(alignment: .leading, spacing: 6) {
-                  TextField("000000", text: $store.pairingCode)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .font(Win95Font.readout)
-                    .multilineTextAlignment(.center)
-                    .focused($codeFocused)
-                    .onChange(of: store.pairingCode) { _, newValue in
-                      store.pairingCode = String(newValue.filter(\.isNumber).prefix(6))
-                    }
-                    .win95Field()
-                  Text("Type the six digits printed by Eng Bridge in the Mac terminal.")
-                    .font(Win95Font.small)
-                    .foregroundStyle(Win95.text)
-                }
+            Win95GroupBox(title: "Replacement phone") {
+              VStack(alignment: .leading, spacing: 6) {
+                TextField("Optional six-digit code", text: $store.pairingCode)
+                  .keyboardType(.numberPad)
+                  .textContentType(.oneTimeCode)
+                  .font(Win95Font.readout)
+                  .multilineTextAlignment(.center)
+                  .focused($codeFocused)
+                  .onChange(of: store.pairingCode) { _, newValue in
+                    store.pairingCode = String(newValue.filter(\.isNumber).prefix(6))
+                  }
+                  .win95Field()
+                Text(
+                  "Usually no code is needed. Use the fallback code printed by Eng Bridge "
+                    + "only when pairing a different iPhone."
+                )
+                .font(Win95Font.small)
+                .foregroundStyle(Win95.text)
               }
             }
           }
@@ -95,7 +96,7 @@ struct ConnectionView: View {
             .foregroundStyle(Win95.text)
             .lineLimit(2)
           Spacer(minLength: 8)
-          Button("Connect >") {
+          Button("Use Code") {
             store.pair()
           }
           .buttonStyle(Win95ButtonStyle(isDefault: true))
@@ -152,9 +153,9 @@ struct ConnectionView: View {
 
   private var connectionDetail: String {
     switch store.connection {
-    case .searching: "Start Eng Bridge on your Mac to connect."
+    case .searching: "Start Eng Bridge on your Mac. This iPhone will connect automatically."
     case .connecting(let name): "Opening an encrypted session with \(name)."
-    case .connected(let name): "Enter the six digits shown by \(name)."
+    case .connected(let name): "Secure session opened with \(name). Finishing setup automatically."
     case .disconnected: "The bridge dropped. Eng will reconnect automatically."
     case .failed(let reason): reason
     }

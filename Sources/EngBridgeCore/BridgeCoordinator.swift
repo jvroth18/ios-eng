@@ -7,6 +7,7 @@ public actor BridgeCoordinator {
   private let telemetry: MacTelemetrySampler
   private let bridgeName: String
   private let statusHandler: @Sendable (String) -> Void
+  private let trustedDeviceHandler: @Sendable (UUID) throws -> Void
   private let transportRegistry: SecureTransportRegistry
   private var pairingGate: PairingGate
   private var pairedPeers = Set<String>()
@@ -29,6 +30,7 @@ public actor BridgeCoordinator {
     pairingGate: PairingGate = PairingGate(),
     transportRegistry: SecureTransportRegistry = SecureTransportRegistry(),
     bridgeName: String = Host.current().localizedName ?? "Mac",
+    trustedDeviceHandler: @escaping @Sendable (UUID) throws -> Void = { _ in },
     statusHandler: @escaping @Sendable (String) -> Void = { _ in }
   ) {
     self.transport = transport
@@ -37,6 +39,7 @@ public actor BridgeCoordinator {
     self.pairingGate = pairingGate
     self.transportRegistry = transportRegistry
     self.bridgeName = bridgeName
+    self.trustedDeviceHandler = trustedDeviceHandler
     self.statusHandler = statusHandler
   }
 
@@ -110,6 +113,7 @@ public actor BridgeCoordinator {
       peerDevices[peer] = hello.deviceID
     case .pair(let request):
       peerDevices[peer] = request.deviceID
+      let wasTrusted = pairingGate.isPaired(deviceID: request.deviceID)
       let result = pairingGate.validate(
         code: request.code,
         deviceID: request.deviceID,
@@ -117,6 +121,15 @@ public actor BridgeCoordinator {
       )
       try? transport.send(BridgeEnvelope(message: .pairResult(result)), to: peer)
       if result.accepted {
+        if !wasTrusted {
+          do {
+            try trustedDeviceHandler(request.deviceID)
+            statusHandler("Remembered this iPhone for automatic reconnection.")
+          } catch {
+            statusHandler(
+              "Paired, but could not remember this iPhone: \(error.localizedDescription)")
+          }
+        }
         pairedPeers.insert(peer)
         statusHandler(
           "Paired \(request.deviceName) over \(transport.kind.title) (\(transport.kind.securityLabel))."

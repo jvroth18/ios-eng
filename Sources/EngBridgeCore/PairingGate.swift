@@ -4,17 +4,20 @@ import Foundation
 public struct PairingGate: Sendable {
   public let code: String
   public let expiresAt: Date
+  private let automaticallyTrustFirstDevice: Bool
   private var pairedDeviceIDs: Set<UUID>
 
   public init(
     code: String = PairingGate.generateCode(),
     createdAt: Date = Date(),
     lifetime: TimeInterval = 10 * 60,
-    pairedDeviceIDs: Set<UUID> = []
+    pairedDeviceIDs: Set<UUID> = [],
+    automaticallyTrustFirstDevice: Bool = false
   ) {
     self.code = code
     expiresAt = createdAt.addingTimeInterval(lifetime)
     self.pairedDeviceIDs = pairedDeviceIDs
+    self.automaticallyTrustFirstDevice = automaticallyTrustFirstDevice
   }
 
   public mutating func validate(
@@ -28,6 +31,10 @@ public struct PairingGate: Sendable {
     }
     guard now <= expiresAt else {
       return PairResult(accepted: false, bridgeName: bridgeName, reason: "Pairing code expired")
+    }
+    if automaticallyTrustFirstDevice, pairedDeviceIDs.isEmpty, candidate.isEmpty {
+      pairedDeviceIDs.insert(deviceID)
+      return PairResult(accepted: true, bridgeName: bridgeName)
     }
     guard Self.constantTimeEquals(candidate, code) else {
       return PairResult(
