@@ -47,11 +47,7 @@ public actor AppServerHost {
 
   public func stop() async {
     guard ownsProcess, let process else { return }
-    if process.isRunning { process.terminate() }
-    for _ in 0..<20 where process.isRunning {
-      try? await Task.sleep(for: .milliseconds(50))
-    }
-    if process.isRunning { process.interrupt() }
+    await OwnedProcessTree.terminate(process)
     self.process = nil
     ownsProcess = false
   }
