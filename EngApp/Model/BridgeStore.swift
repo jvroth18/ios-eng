@@ -63,6 +63,7 @@ final class BridgeStore: ObservableObject {
   /// probe is expected on first pairing and must not surface as an error.
   private var awaitingTrustedReconnect = false
   private var pendingWorkspacePages: [Int: WorkspacePage] = [:]
+  private var optimisticMessages: [String: [TimelineItem]] = [:]
 
   convenience init() {
     self.init(client: nil, arguments: ProcessInfo.processInfo.arguments)
@@ -183,8 +184,23 @@ final class BridgeStore: ObservableObject {
   func sendMessage(_ text: String, to threadID: String) {
     let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalized.isEmpty else { return }
+    let optimistic = TimelineItem(
+      id: "local:user:\(UUID().uuidString)",
+      threadID: threadID,
+      turnID: threadDetail?.thread.id == threadID ? threadDetail?.thread.activeTurnID : nil,
+      kind: .user,
+      state: .pending,
+      title: "You",
+      body: normalized,
+      timestamp: Date()
+    )
+    optimisticMessages[threadID, default: []].append(optimistic)
+    appendOptimistic(optimistic)
     isSending = true
-    send(.sendMessage(SendMessageRequest(threadID: threadID, text: normalized)))
+    if !send(.sendMessage(SendMessageRequest(threadID: threadID, text: normalized))) {
+      markLatestOptimisticMessageFailed(threadID: threadID)
+      isSending = false
+    }
   }
 
   func interrupt(threadID: String, turnID: String) {
@@ -279,7 +295,7 @@ final class BridgeStore: ObservableObject {
     case .workspacePage(let page):
       receive(page)
     case .threadDetail(let detail):
-      threadDetail = detail
+      threadDetail = reconcileOptimisticMessages(in: detail)
       isSending = false
     case .timelineEvent(let item):
       mergeTimelineEvent(item)
@@ -290,6 +306,7 @@ final class BridgeStore: ObservableObject {
     case .pong(let pong):
       receive(pong)
     case .error(let error):
+      if let selectedThreadID { markLatestOptimisticMessageFailed(threadID: selectedThreadID) }
       isSending = false
       if error.code == "pairing_required" { isPaired = false }
       presentedError = error
@@ -316,6 +333,16 @@ final class BridgeStore: ObservableObject {
   private func mergeTimelineEvent(_ item: TimelineItem) {
     guard var detail = threadDetail, detail.thread.id == item.threadID else { return }
     var timeline = detail.timeline
+
+    if item.kind == .user,
+      let optimisticIndex = timeline.firstIndex(where: {
+        $0.id.hasPrefix("local:user:") && messagesMatch($0, item)
+      })
+    {
+      let optimisticID = timeline[optimisticIndex].id
+      timeline.remove(at: optimisticIndex)
+      optimisticMessages[item.threadID]?.removeAll { $0.id == optimisticID }
+    }
 
     if item.state != .running,
       let index = timeline.lastIndex(where: {
@@ -352,6 +379,83 @@ final class BridgeStore: ObservableObject {
       refreshedAt: Date()
     )
     threadDetail = detail
+  }
+
+  private func appendOptimistic(_ item: TimelineItem) {
+    guard let detail = threadDetail, detail.thread.id == item.threadID else { return }
+    threadDetail = ThreadDetail(
+      thread: detail.thread,
+      timeline: detail.timeline + [item],
+      pendingActions: detail.pendingActions,
+      refreshedAt: Date()
+    )
+  }
+
+  private func reconcileOptimisticMessages(in detail: ThreadDetail) -> ThreadDetail {
+    guard var pending = optimisticMessages[detail.thread.id], !pending.isEmpty else {
+      return detail
+    }
+    var unmatchedServerUsers = detail.timeline.filter { $0.kind == .user }
+    pending.removeAll { optimistic in
+      guard let match = unmatchedServerUsers.firstIndex(where: {
+        messagesMatch(optimistic, $0)
+          && $0.timestamp >= optimistic.timestamp.addingTimeInterval(-30)
+      }) else { return false }
+      unmatchedServerUsers.remove(at: match)
+      return true
+    }
+
+    let acknowledged = pending.map { item in
+      TimelineItem(
+        id: item.id,
+        threadID: item.threadID,
+        turnID: item.turnID,
+        kind: item.kind,
+        state: item.state == .failed ? .failed : .completed,
+        title: item.title,
+        body: item.body,
+        timestamp: item.timestamp
+      )
+    }
+    optimisticMessages[detail.thread.id] = acknowledged
+    return ThreadDetail(
+      thread: detail.thread,
+      timeline: detail.timeline + acknowledged,
+      pendingActions: detail.pendingActions,
+      refreshedAt: detail.refreshedAt
+    )
+  }
+
+  private func markLatestOptimisticMessageFailed(threadID: String) {
+    guard var items = optimisticMessages[threadID], let last = items.indices.last else { return }
+    let failed = TimelineItem(
+      id: items[last].id,
+      threadID: items[last].threadID,
+      turnID: items[last].turnID,
+      kind: items[last].kind,
+      state: .failed,
+      title: items[last].title,
+      body: items[last].body,
+      timestamp: items[last].timestamp
+    )
+    items[last] = failed
+    optimisticMessages[threadID] = items
+    guard let detail = threadDetail, detail.thread.id == threadID,
+      let index = detail.timeline.firstIndex(where: { $0.id == failed.id })
+    else { return }
+    var timeline = detail.timeline
+    timeline[index] = failed
+    threadDetail = ThreadDetail(
+      thread: detail.thread,
+      timeline: timeline,
+      pendingActions: detail.pendingActions,
+      refreshedAt: Date()
+    )
+  }
+
+  private func messagesMatch(_ lhs: TimelineItem, _ rhs: TimelineItem) -> Bool {
+    lhs.body.trimmingCharacters(in: .whitespacesAndNewlines)
+      == rhs.body.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private func samplePhone() {
@@ -441,17 +545,21 @@ final class BridgeStore: ObservableObject {
         )))
   }
 
-  private func send(_ message: BridgeMessage) {
+  @discardableResult
+  private func send(_ message: BridgeMessage) -> Bool {
     do {
       try client.send(BridgeEnvelope(message: message))
+      return true
     } catch let error as BridgeError {
       presentedError = error
+      return false
     } catch {
       presentedError = BridgeError(
         code: "phone_send",
         message: error.localizedDescription,
         recoverable: true
       )
+      return false
     }
   }
 

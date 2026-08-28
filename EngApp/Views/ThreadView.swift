@@ -17,6 +17,9 @@ struct ThreadView: View {
         VStack(spacing: 5) {
           toolbar
           contextBox
+          if let activity {
+            activityBar(activity)
+          }
           timeline
           composer
           Win95StatusBar(items: [
@@ -41,6 +44,15 @@ struct ThreadView: View {
   }
 
   private var displayedThread: ThreadSummary { displayedDetail?.thread ?? thread }
+
+  private var activity: ThreadActivityPresentation? {
+    ThreadActivityPresentation.current(
+      thread: displayedThread,
+      timeline: displayedDetail?.timeline ?? [],
+      pendingActions: displayedDetail?.pendingActions ?? [],
+      isSending: store.isSending
+    )
+  }
 
   /// Changes whenever the visible tail of the conversation changes, including body
   /// growth of a streaming item that keeps its id.
@@ -108,6 +120,33 @@ struct ThreadView: View {
         .foregroundStyle(Win95.shadow)
       }
     }
+  }
+
+  private func activityBar(_ activity: ThreadActivityPresentation) -> some View {
+    HStack(spacing: 7) {
+      Win95LED(
+        color: activity.isActive ? Win95.ledGreen : Win95.warning,
+        blinking: activity.isActive
+      )
+      Image(systemName: activity.symbol)
+        .font(.system(size: 12, weight: .semibold))
+      Text(activity.title)
+        .font(Win95Font.bold)
+      if let detail = activity.detail {
+        Text(detail)
+          .font(Win95Font.small)
+          .lineLimit(1)
+      }
+      Spacer(minLength: 0)
+    }
+    .foregroundStyle(Win95.text)
+    .padding(.horizontal, 7)
+    .frame(minHeight: 27)
+    .bevel(.status)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(
+      [activity.title, activity.detail].compactMap { $0 }.joined(separator: ": ")
+    )
   }
 
   private var timeline: some View {
@@ -238,6 +277,14 @@ private struct MessageLine: View {
         if item.state == .running {
           Text("…")
             .font(Win95Font.bold)
+        } else if item.state == .pending {
+          Text("Sending…")
+            .font(Win95Font.small)
+            .opacity(0.8)
+        } else if item.state == .failed {
+          Text("Failed")
+            .font(Win95Font.small)
+            .foregroundStyle(Win95.ledRed)
         }
       }
       Text(item.body.isEmpty ? "…" : item.body)

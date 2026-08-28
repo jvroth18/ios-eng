@@ -120,6 +120,45 @@ struct BridgeStoreTests {
     #expect(timeline.map(\.id) == ["a1", "c1"])
   }
 
+  @Test func outgoingMessageAppearsBeforeTheBridgeReplies() {
+    let (store, client) = Self.makeStore()
+    store.receive(
+      BridgeEnvelope(message: .threadDetail(ThreadDetail(thread: Self.thread("t1"), timeline: []))))
+
+    store.sendMessage("  Hello now  ", to: "t1")
+
+    let item = store.threadDetail?.timeline.last
+    #expect(item?.kind == .user)
+    #expect(item?.body == "Hello now")
+    #expect(item?.state == .pending)
+    #expect(item?.id.hasPrefix("local:user:") == true)
+    #expect(store.isSending)
+    #expect(
+      client.sent.contains {
+        guard case .sendMessage(let request) = $0 else { return false }
+        return request.threadID == "t1" && request.text == "Hello now"
+      })
+  }
+
+  @Test func serverMessageReplacesItsOptimisticCopyWithoutDuplication() {
+    let (store, _) = Self.makeStore()
+    store.receive(
+      BridgeEnvelope(message: .threadDetail(ThreadDetail(thread: Self.thread("t1"), timeline: []))))
+    store.sendMessage("Hello now", to: "t1")
+    let serverItem = TimelineItem(
+      id: "server-user-1", threadID: "t1", turnID: "turn-t1", kind: .user,
+      state: .completed, title: "You", body: "Hello now", timestamp: Date())
+
+    store.receive(
+      BridgeEnvelope(
+        message: .threadDetail(
+          ThreadDetail(thread: Self.thread("t1"), timeline: [serverItem]))))
+
+    let userItems = store.threadDetail?.timeline.filter { $0.kind == .user } ?? []
+    #expect(userItems.map(\.id) == ["server-user-1"])
+    #expect(!store.isSending)
+  }
+
   @Test func workspacePagesAssembleOnlyWhenComplete() {
     let (store, _) = Self.makeStore()
     let projects = (0..<40).map { index in
