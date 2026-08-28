@@ -12,16 +12,24 @@ exact thread UUID. Reopening the same conversation preserves its existing timeli
 while the subscription refreshes instead of clearing to a loading screen. This
 transition repair is released as Eng 0.5.3 (build 9).
 
+Eng 0.6.0 (build 10) keeps Stop present with truthful enablement, persists an
+independent draft for every thread, marks saved drafts in the conversation and
+project list, and animates the complete conversation window when the keyboard
+appears. Its model selector is populated from the installed App Server's account
+catalog and applies an exact `thread/settings/update` only to a bridge-owned existing
+thread. Active turns label the choice `Next turn`; `Mac Live` threads disclose that
+the owning Mac process controls their model.
+
 ## Contracts and unit coverage
 
 - `swift format lint --strict` passes across app, bridge, shared sources, tests, and scripts.
-- `swift test` passes 49 tests in 15 suites.
+- `swift test` passes 50 tests in 15 suites.
 - Coverage includes protocol round trips, encrypted-pairing gates, Git-root grouping, App Server event and request mapping, public Mac telemetry, link classification, a real 64 KB probe payload, lossless workspace paging, App Server supervision, subscription recovery, active-turn steering, idle existing-thread turns, and the phone command allowlist.
 - The paging stress fixture carries 245 threads, keeps every encoded frame below the Multipeer Connectivity resource ceiling, and reassembles without loss.
 
 ## Native app build and installation
 
-- Xcode simulator tests pass 30 tests with 0 failures on iPhone 17 Pro.
+- Xcode simulator tests pass 33 tests with 0 failures on iPhone 17 Pro.
 - A Release `iphoneos` build succeeds with Apple Development signing and automatic provisioning for bundle `dev.jvroth.eng`.
 - The last installed Release artifact before the active-writer repair was `Eng` version `0.2.0` (build `2`).
 - The configuration release `Eng` version `0.4.0` (build `4`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as a live `/Eng.app/Eng` process.

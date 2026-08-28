@@ -29,7 +29,7 @@ Each thread exposes a truthful control level:
 
 Every refresh checks `thread/loaded/list` and resumes loaded threads on the bridge connection. This is what makes an active CLI or IDE thread stream to Eng even when another App Server client created it. A phone selection is also retained as a desired subscription and resumed again after an App Server reconnect. Existing independent sessions therefore become live without duplicating the thread.
 
-The phone command policy is an allowlist. It permits refresh, subscribe, message or steer, interrupt, supported approval and user-input responses, analytics, and link probes. There is no phone message for `thread/start`, fork, archive, delete, shell execution, or arbitrary App Server JSON-RPC. When the selected existing thread is idle, phone text uses `turn/start` with that thread ID; when it is active, it uses `turn/steer` with the expected turn ID.
+The phone command policy is an allowlist. It permits refresh, subscribe, message or steer, model selection, interrupt, supported approval and user-input responses, analytics, and link probes. There is no phone message for `thread/start`, fork, archive, delete, shell execution, or arbitrary App Server JSON-RPC. When the selected existing thread is idle, phone text uses `turn/start` with that thread ID; when it is active, it uses `turn/steer` with the expected turn ID. The bridge obtains the model menu from App Server's paginated `model/list` result and validates every selection before applying `thread/settings/update` to the existing bridge-owned thread. It never invents a static account catalog or changes the owner-controlled model of a `Mac Live` thread.
 
 For a `Mac Live` thread, message delivery uses `codex queue --thread … --message
 …`, which preserves the existing owner. Stop mirrors Ctrl-C only when the writer
@@ -57,7 +57,7 @@ The transport boundary is shared by the bridge coordinator and phone store, so C
 
 The fallback `Nearby Auto` transport uses `MCSession` with required encryption. On iOS, Apple may carry that session over infrastructure Wi-Fi, peer-to-peer Wi-Fi, or Bluetooth. The framework does not expose which bearer it selected, so Eng labels the path `Nearby Auto` rather than making an unsupported radio claim.
 
-Protocol v4 carries transport identity and direct-session key material. Network Framework discovers the Mac through Bonjour on every eligible local interface. The phone prefers a discovered wired-Ethernet interface—which is how Apple exposes USB Personal Hotspot—then Wi-Fi or another local path. A Curve25519 agreement protects the initial pair exchange; the phone and Mac persistently pin each other's public identities, and accepted sessions rotate to a short-lived random 256-bit AES-GCM credential. Nearby remains the fallback.
+Protocol v5 carries transport identity, direct-session key material, the account-aware model catalog, and existing-thread model updates. Network Framework discovers the Mac through Bonjour on every eligible local interface. The phone prefers a discovered wired-Ethernet interface—which is how Apple exposes USB Personal Hotspot—then Wi-Fi or another local path. A Curve25519 agreement protects the initial pair exchange; the phone and Mac persistently pin each other's public identities, and accepted sessions rotate to a short-lived random 256-bit AES-GCM credential. Nearby remains the fallback.
 
 A USB-C cable alone is only a trusted device/developer connection and is not a public application data channel. USB-C transport therefore requires Personal Hotspot to expose `iPhone USB` as a network interface. Eng does not use `usbmuxd`, developer port forwarding, private frameworks, or MFi accessory protocols.
 
@@ -95,6 +95,12 @@ produce notifications, and activity in the visible conversation stays read. Newe
 background activity persists the thread UUID in app preferences, produces an
 in-app banner, and appears as project, tab, status-bar, and thread-row counts. Opening
 the exact conversation clears its unread state. Removed threads are pruned.
+
+Draft text is keyed by thread UUID in iPhone preferences and is never sent until
+the user presses Send, Steer, or Queue. Navigating away or relaunching therefore
+preserves unfinished text without mixing drafts between threads. Keyboard appearance
+animates the complete conversation window upward while the timeline remains the
+flexible region, keeping the composer and surrounding chat context together.
 
 ## Failure behavior
 

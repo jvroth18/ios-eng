@@ -39,6 +39,14 @@ emphasis, links, lists, quotes, and fenced code blocks. Background activity mark
 the exact thread unread, shows an in-app banner plus project/thread badges, persists
 across launches, and clears when that conversation is opened.
 
+The conversation toolbar keeps Stop visible and enables it only when the selected
+thread has an interruptible turn. Drafts are saved independently per thread, survive
+navigation and relaunch, and appear as thread-row and toolbar indicators. Opening
+the keyboard animates the entire conversation window upward. For bridge-owned live
+threads, the Model menu is populated from the signed-in Codex account and changes
+the model for subsequent turns in that existing thread; a `Mac Live` thread remains
+truthfully controlled by its owning Mac process.
+
 ## Status
 
 This repository was delivered in validated, incremental commits:

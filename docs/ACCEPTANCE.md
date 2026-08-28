@@ -12,6 +12,7 @@ This file keeps the original goal testable instead of allowing the implementatio
 | Active Mac writer | Selecting a thread owned by another Codex process opens a bounded `Mac Live` transcript instead of raising an active-writer error; phone text queues into the owner and Stop is available only for a verified interactive CLI writer |
 | Phone cannot create or delete threads | Explicit command allowlist, no create/fork/archive/delete protocol cases or UI, and tests asserting no `thread/start` call while existing-thread interaction remains available |
 | Active Mac threads stream to the phone | Loaded-thread discovery, bridge-side resume, connection-scoped subscriptions, two-client live notification probe, and recovery resubscription tests |
+| Stop, model, keyboard, and draft controls | Always-present guarded Stop action, App Server account model catalog plus exact existing-thread settings update, whole-window keyboard animation, and independent persisted per-thread draft tests and indicators |
 | Beautifully simple | Rendered simulator/device screenshots of Projects, Thread, pairing/empty/error states, and accessibility checks |
 | Analytics for iPhone and MacBook | Live CPU/memory/disk/power/thermal/interface/throughput/latency samples with timestamps from both devices |
 | Bluetooth and Wi-Fi nearby operation | Apple Nearby Auto transport with required encryption, explicit supported-bearer copy, and no unsupported claim about the selected radio |
