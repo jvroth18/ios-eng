@@ -91,7 +91,7 @@ struct ConnectionView: View {
           Image(systemName: "lock.fill")
             .font(.system(size: 11))
             .foregroundStyle(Win95.text)
-          Text("Encrypted nearby session. Codex stays on the Mac.")
+          Text("Encrypted direct or nearby session. Codex stays on the Mac.")
             .font(Win95Font.small)
             .foregroundStyle(Win95.text)
             .lineLimit(2)
@@ -105,7 +105,7 @@ struct ConnectionView: View {
         .padding(.horizontal, 6)
         .padding(.vertical, 8)
 
-        Win95StatusBar(items: [store.connectionLabel, "Nearby Auto"])
+        Win95StatusBar(items: [store.connectionLabel, store.activePathLabel])
           .padding(.horizontal, 2)
           .padding(.bottom, 2)
       }

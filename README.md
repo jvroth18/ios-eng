@@ -5,12 +5,12 @@ Eng is a private, native iPhone companion for Codex work running on your Mac. It
 The repository contains three pieces:
 
 - `EngCore`: the versioned, tested wire protocol and shared models.
-- `EngBridge`: a Mac companion that connects to Codex App Server and advertises encrypted nearby and direct Wi-Fi sessions.
+- `EngBridge`: a Mac companion that connects to Codex App Server and advertises encrypted nearby and direct-local sessions.
 - `Eng`: a deliberately small SwiftUI iPhone app with Projects, Thread, and Analytics surfaces, drawn in a classic Windows 9x "analog" style (beveled windows, tab pages, LEDs, and a green-phosphor system monitor) from the `EngApp/Design/Win95.swift` kit.
 
 ## Product boundary
 
-Codex App Server is the supported deep-client interface for conversation history, streamed events, turns, steering, and approvals. Eng keeps that interface on the Mac. The phone talks only to the paired bridge. Nearby pairing uses encrypted Apple Multipeer Connectivity; after pairing, an authenticated AES-GCM channel automatically prefers direct Wi-Fi and falls back to nearby.
+Codex App Server is the supported deep-client interface for conversation history, streamed events, turns, steering, and approvals. Eng keeps that interface on the Mac. The phone talks only to the paired bridge. The authenticated AES-GCM direct channel prefers an Apple-exposed USB-C/wired network path, then local or peer-to-peer Wi-Fi, and falls back to encrypted Apple Nearby.
 
 Ordinary CLI sessions can always be discovered from Codex's local thread store. Live steering and approval handling require the thread to be controllable by the bridge/shared App Server. Eng displays `Observe`, `Message`, or `Live` on every thread so the user can see the real boundary.
 
@@ -55,8 +55,8 @@ open Eng.xcodeproj
 
 The generated Xcode project is intentionally ignored; `project.yml` is its source of truth. The debug-only `-eng-demo`, `-eng-analytics`, and `-eng-thread` launch arguments render deterministic project, analytics, and thread states for visual QA without altering release behavior. `-eng-pair-code CODE` automates pairing only in debug builds for repeatable simulator integration tests.
 
-On each bridge launch, enter the short pairing code shown in the Mac terminal. Reconnects to that running bridge are automatic. Analytics retains only the most recent 90 in-memory samples per device. Exact iPhone temperature is not available through Apple’s public API, so Eng reports `ProcessInfo.thermalState` categories instead of degrees.
+The first phone opened during the bridge pairing window is remembered automatically. The short Mac-terminal code remains available for a replacement phone; normal reconnects do not require it. For USB-C, enable iPhone Personal Hotspot and connect the trusted cable so Apple exposes an `iPhone USB` network interface to Network Framework. Analytics retains only the most recent 90 in-memory samples per device. Exact iPhone temperature is not available through Apple’s public API, so Eng reports `ProcessInfo.thermalState` categories instead of degrees.
 
 ## Privacy
 
-Eng is local-first. It does not contain an OpenAI API key, copy Codex authentication to the phone, or expose Codex App Server. Its Bonjour TCP listener accepts only frames authenticated and encrypted with a random 256-bit credential delivered inside the paired nearby session. Diagnostic history is short-lived and remains on the two devices.
+Eng is local-first. It does not contain an OpenAI API key, copy Codex authentication to the phone, or expose Codex App Server. Its Bonjour TCP listener performs Curve25519 key agreement, pins both device identities, and accepts only authenticated AES-GCM frames. Diagnostic history is short-lived and remains on the two devices.

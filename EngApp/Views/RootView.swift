@@ -73,7 +73,7 @@ struct RootView: View {
 
         Win95StatusBar(items: [
           store.connectionLabel,
-          store.analytics.link.transport.title,
+          store.activePathLabel,
           store.bridgeName ?? "Mac",
         ])
         .padding(.horizontal, 3)

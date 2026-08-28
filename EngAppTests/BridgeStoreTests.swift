@@ -36,6 +36,19 @@ final class FakeBridgeClient: BridgeClientTransport, @unchecked Sendable {
 struct BridgeStoreTests {
   private static let now = Date(timeIntervalSince1970: 1_700_000_000)
 
+  @Test func directLinkBearerLabelsAreHonest() {
+    #expect(DirectLinkBearer.classify(interfaceType: .wiredEthernet) == .wired)
+    #expect(DirectLinkBearer.classify(interfaceType: .wifi) == .wifi)
+    #expect(DirectLinkBearer.classify(interfaceType: .other) == .other)
+    #expect(DirectLinkBearer.wired.connectionName.contains("USB-C"))
+  }
+
+  @Test func activePathLabelUsesTheConnectedBearer() {
+    let (store, _) = Self.makeStore()
+    store.handleForTesting(.state(.connected("Mac · USB-C / Wired")))
+    #expect(store.activePathLabel == "USB-C / Wired")
+  }
+
   private static func thread(_ id: String) -> ThreadSummary {
     ThreadSummary(
       id: id, title: "Thread \(id)", preview: "", cwd: "/tmp/\(id)", repositoryRoot: "/tmp/\(id)",

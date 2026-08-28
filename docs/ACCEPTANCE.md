@@ -14,7 +14,8 @@ This file keeps the original goal testable instead of allowing the implementatio
 | Beautifully simple | Rendered simulator/device screenshots of Projects, Thread, pairing/empty/error states, and accessibility checks |
 | Analytics for iPhone and MacBook | Live CPU/memory/disk/power/thermal/interface/throughput/latency samples with timestamps from both devices |
 | Bluetooth and Wi-Fi nearby operation | Apple Nearby Auto transport with required encryption, explicit supported-bearer copy, and no unsupported claim about the selected radio |
-| Fast secure remote path | Transport-neutral protocol, authenticated direct Wi-Fi implementation, and host-key-verified SSH tunnel without exposing App Server or Codex credentials |
+| USB-C local operation | Public Network Framework path over Apple’s `iPhone USB` Personal Hotspot interface, wired-interface preference and honest bearer label, with no private USB or developer forwarding API |
+| Fast secure remote path | Transport-neutral protocol, authenticated direct-local implementation, and host-key-verified SSH tunnel without exposing App Server or Codex credentials |
 | Honest temperature behavior | Public thermal-state categories; no degree value or private API in source |
 | Incremental implementation | Separate validated commits pushed after contract, bridge, app, and final end-to-end phases |
 

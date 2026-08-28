@@ -3,6 +3,28 @@ import EngCore
 import Foundation
 @preconcurrency import Network
 
+enum DirectLinkBearer: Equatable, Sendable {
+  case wired
+  case wifi
+  case other
+
+  var connectionName: String {
+    switch self {
+    case .wired: "Mac · USB-C / Wired"
+    case .wifi: "Mac · Direct Wi-Fi"
+    case .other: "Mac · Direct Local"
+    }
+  }
+
+  static func classify(interfaceType: NWInterface.InterfaceType?) -> Self {
+    switch interfaceType {
+    case .wiredEthernet: .wired
+    case .wifi: .wifi
+    default: .other
+    }
+  }
+}
+
 final class WiFiClient: @unchecked Sendable {
   private let queue = DispatchQueue(label: "dev.jvroth.eng.wifi-client")
   private let deviceID: UUID
@@ -46,8 +68,16 @@ final class WiFiClient: @unchecked Sendable {
     let browser = NWBrowser(
       for: .bonjour(type: "_ios-eng-fast._tcp", domain: nil), using: parameters)
     browser.browseResultsChangedHandler = { [weak self] results, _ in
-      guard let self, let endpoint = results.first?.endpoint else { return }
-      self.connect(to: endpoint, parameters: parameters)
+      guard let self, let result = Self.preferredResult(in: results) else { return }
+      let interface = Self.preferredInterface(in: result)
+      let connectionParameters = NWParameters.tcp
+      connectionParameters.includePeerToPeer = true
+      connectionParameters.requiredInterface = interface
+      self.connect(
+        to: result.endpoint,
+        parameters: connectionParameters,
+        bearer: .classify(interfaceType: interface?.type)
+      )
     }
     browser.stateUpdateHandler = { [weak self] state in
       if case .failed(let error) = state { self?.emit(.state(.failed(error.localizedDescription))) }
@@ -76,7 +106,7 @@ final class WiFiClient: @unchecked Sendable {
       })
     else {
       throw BridgeError(
-        code: "wifi_disconnected", message: "The direct Wi-Fi link is not connected.",
+        code: "direct_disconnected", message: "The direct local link is not connected.",
         recoverable: true)
     }
     let packet = try SecureTransportCodec.seal(envelope, using: bootstrap)
@@ -86,7 +116,11 @@ final class WiFiClient: @unchecked Sendable {
 
   var connected: Bool { lock.withLock { isConnected } }
 
-  private func connect(to endpoint: NWEndpoint, parameters: NWParameters) {
+  private func connect(
+    to endpoint: NWEndpoint,
+    parameters: NWParameters,
+    bearer: DirectLinkBearer
+  ) {
     let shouldConnect = lock.withLock { self.connection == nil }
     guard shouldConnect else { return }
     let connection = NWConnection(to: endpoint, using: parameters)
@@ -95,7 +129,7 @@ final class WiFiClient: @unchecked Sendable {
       guard let self, let connection else { return }
       switch state {
       case .ready:
-        self.sendPairingHello(on: connection)
+        self.sendPairingHello(on: connection, bearer: bearer)
       case .failed(let error): self.disconnected(error.localizedDescription)
       case .cancelled: self.disconnected(nil)
       default: break
@@ -104,7 +138,7 @@ final class WiFiClient: @unchecked Sendable {
     connection.start(queue: queue)
   }
 
-  private func sendPairingHello(on connection: NWConnection) {
+  private func sendPairingHello(on connection: NWConnection, bearer: DirectLinkBearer) {
     do {
       let hello = DirectPairingHello(
         deviceID: deviceID,
@@ -119,13 +153,17 @@ final class WiFiClient: @unchecked Sendable {
         completion: .contentProcessed { [weak self] error in
           if let error { self?.disconnected(error.localizedDescription) }
         })
-      receivePairingResponse(on: connection, buffer: NewlineFrameBuffer())
+      receivePairingResponse(on: connection, buffer: NewlineFrameBuffer(), bearer: bearer)
     } catch {
       disconnected(error.localizedDescription)
     }
   }
 
-  private func receivePairingResponse(on connection: NWConnection, buffer: NewlineFrameBuffer) {
+  private func receivePairingResponse(
+    on connection: NWConnection,
+    buffer: NewlineFrameBuffer,
+    bearer: DirectLinkBearer
+  ) {
     connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1_024) {
       [weak self, weak connection] data, _, complete, error in
       guard let self, let connection else { return }
@@ -136,7 +174,7 @@ final class WiFiClient: @unchecked Sendable {
           if complete || error != nil {
             self.disconnected(error?.localizedDescription)
           } else {
-            self.receivePairingResponse(on: connection, buffer: nextBuffer)
+            self.receivePairingResponse(on: connection, buffer: nextBuffer, bearer: bearer)
           }
           return
         }
@@ -165,7 +203,7 @@ final class WiFiClient: @unchecked Sendable {
           self.browser?.cancel()
           self.browser = nil
         }
-        self.emit(.state(.connected("Mac · Direct Wi-Fi")))
+        self.emit(.state(.connected(bearer.connectionName)))
         self.receive(on: connection, buffer: NewlineFrameBuffer())
       } catch {
         connection.cancel()
@@ -209,6 +247,23 @@ final class WiFiClient: @unchecked Sendable {
 
   private func emit(_ event: BridgeClientEvent) {
     lock.withLock { eventHandler }?(event)
+  }
+
+  private static func preferredResult(
+    in results: Set<NWBrowser.Result>
+  ) -> NWBrowser.Result? {
+    results.sorted { lhs, rhs in
+      let lhsScore = preferredInterface(in: lhs)?.type == .wiredEthernet ? 1 : 0
+      let rhsScore = preferredInterface(in: rhs)?.type == .wiredEthernet ? 1 : 0
+      if lhsScore != rhsScore { return lhsScore > rhsScore }
+      return String(describing: lhs.endpoint) < String(describing: rhs.endpoint)
+    }.first
+  }
+
+  private static func preferredInterface(in result: NWBrowser.Result) -> NWInterface? {
+    result.interfaces.first(where: { $0.type == .wiredEthernet })
+      ?? result.interfaces.first(where: { $0.type == .wifi })
+      ?? result.interfaces.first
   }
 }
 

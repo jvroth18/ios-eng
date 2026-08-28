@@ -68,7 +68,7 @@ final class BridgeStore: ObservableObject {
     self.init(client: nil, arguments: ProcessInfo.processInfo.arguments)
   }
 
-  /// `client` defaults to the adaptive nearby/Wi-Fi transport. Tests inject a fake
+  /// `client` defaults to the adaptive direct-local/Nearby transport. Tests inject a fake
   /// so store logic (paging, timeline merging, link probes) runs without radios.
   init(client: (any BridgeClientTransport)?, arguments: [String]) {
     demoMode = arguments.contains("-eng-demo")
@@ -111,6 +111,12 @@ final class BridgeStore: ObservableObject {
     case .disconnected: "Reconnecting"
     case .failed: "Connection issue"
     }
+  }
+
+  var activePathLabel: String {
+    guard case .connected(let endpoint) = connection else { return client.kind.title }
+    let parts = endpoint.split(separator: "·", maxSplits: 1)
+    return parts.count == 2 ? String(parts[1]).trimmingCharacters(in: .whitespaces) : endpoint
   }
 
   func start() {

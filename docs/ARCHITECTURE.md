@@ -9,7 +9,8 @@ Codex CLI / IDE threads
           v
      EngBridge on Mac
           |
-          | encrypted Nearby Auto or authenticated direct Wi-Fi
+          | encrypted Nearby Auto or authenticated direct local
+          | (USB-C/wired preferred, then Wi-Fi)
           v
         Eng on iPhone
 ```
@@ -33,9 +34,11 @@ The phone command policy is an allowlist. It permits refresh, subscribe, message
 
 The transport boundary is shared by the bridge coordinator and phone store, so Codex mapping, pairing, bounded paging, analytics, and control behavior do not depend on one network implementation.
 
-The default `Nearby Auto` transport uses `MCSession` with required encryption. On iOS, Apple may carry that session over infrastructure Wi-Fi, peer-to-peer Wi-Fi, or Bluetooth. The framework does not expose which bearer it selected, so Eng labels the path `Nearby Auto` rather than making an unsupported Bluetooth or Wi-Fi claim. Each bridge process presents a short-lived pairing code on its first phone connection; reconnects to that running process reuse the validated device identity.
+The fallback `Nearby Auto` transport uses `MCSession` with required encryption. On iOS, Apple may carry that session over infrastructure Wi-Fi, peer-to-peer Wi-Fi, or Bluetooth. The framework does not expose which bearer it selected, so Eng labels the path `Nearby Auto` rather than making an unsupported radio claim.
 
-Protocol v4 carries transport identity and a short-lived direct-transport bootstrap. After nearby pairing, the Mac sends a random 256-bit credential inside the encrypted `MCSession`. Network Framework then discovers the Mac through Bonjour, enables peer-to-peer Wi-Fi, and encrypts and authenticates every bounded TCP frame with AES-GCM. Direct Wi-Fi becomes preferred when ready and the nearby session remains the fallback.
+Protocol v4 carries transport identity and direct-session key material. Network Framework discovers the Mac through Bonjour on every eligible local interface. The phone prefers a discovered wired-Ethernet interface—which is how Apple exposes USB Personal Hotspot—then Wi-Fi or another local path. A Curve25519 agreement protects the initial pair exchange; the phone and Mac persistently pin each other's public identities, and accepted sessions rotate to a short-lived random 256-bit AES-GCM credential. Nearby remains the fallback.
+
+A USB-C cable alone is only a trusted device/developer connection and is not a public application data channel. USB-C transport therefore requires Personal Hotspot to expose `iPhone USB` as a network interface. Eng does not use `usbmuxd`, developer port forwarding, private frameworks, or MFi accessory protocols.
 
 The SSH path is specified in [SSH Pipe](SSH-PIPE.md). It must verify the server host key and use public-key authentication; accepting any host key, exposing App Server, or storing a password in app preferences is outside the product boundary.
 

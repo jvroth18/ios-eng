@@ -109,7 +109,7 @@ struct AnalyticsView: View {
             .font(.system(size: 12))
             .frame(width: 16)
           VStack(alignment: .leading, spacing: 2) {
-            Text(store.analytics.link.transport.title)
+            Text(store.activePathLabel)
               .font(Win95Font.bold)
             Text(store.analytics.link.transport.detail)
               .font(Win95Font.small)
@@ -156,13 +156,13 @@ struct AnalyticsView: View {
   private var linkNote: String {
     if store.analytics.link.isConstrained == true { return "Low Data Mode" }
     if store.analytics.link.isExpensive == true { return "Metered" }
-    return store.analytics.phone?.interface.rawValue.uppercased() ?? "—"
+    return store.activePathLabel
   }
 
   private var transportSymbol: String {
     switch store.analytics.link.transport {
     case .nearbyAuto: "dot.radiowaves.left.and.right"
-    case .wifiDirect: "wifi"
+    case .wifiDirect: "network"
     case .sshTunnel: "lock.fill"
     }
   }

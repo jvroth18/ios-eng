@@ -48,14 +48,14 @@ public final class WiFiServer: @unchecked Sendable {
       listener.newConnectionHandler = { [weak self] connection in self?.accept(connection) }
       listener.stateUpdateHandler = { state in
         if case .failed(let error) = state {
-          FileHandle.standardError.write(Data("Eng Wi-Fi listener failed: \(error)\n".utf8))
+          FileHandle.standardError.write(Data("Eng direct listener failed: \(error)\n".utf8))
         }
       }
       lock.withLock { self.listener = listener }
       listener.start(queue: queue)
     } catch {
       FileHandle.standardError.write(
-        Data("Eng Wi-Fi listener failed: \(error.localizedDescription)\n".utf8))
+        Data("Eng direct listener failed: \(error.localizedDescription)\n".utf8))
     }
   }
 
@@ -78,7 +78,7 @@ public final class WiFiServer: @unchecked Sendable {
       let connection = lock.withLock({ connections[peerName] })
     else {
       throw BridgeError(
-        code: "wifi_disconnected", message: "The secure Wi-Fi link is unavailable.",
+        code: "direct_disconnected", message: "The secure direct link is unavailable.",
         recoverable: true)
     }
     let packet = try SecureTransportCodec.seal(envelope, using: bootstrap)

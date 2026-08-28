@@ -8,7 +8,7 @@ public enum BridgeTransportKind: String, Codable, CaseIterable, Equatable, Senda
   public var title: String {
     switch self {
     case .nearbyAuto: "Nearby Auto"
-    case .wifiDirect: "Direct Wi-Fi"
+    case .wifiDirect: "Direct Local"
     case .sshTunnel: "SSH Tunnel"
     }
   }
@@ -26,7 +26,7 @@ public enum BridgeTransportKind: String, Codable, CaseIterable, Equatable, Senda
     case .nearbyAuto:
       "Automatically uses Bluetooth, peer-to-peer Wi-Fi, or local Wi-Fi. Apple does not expose the selected bearer."
     case .wifiDirect:
-      "Uses Curve25519 key agreement and authenticated encryption over the fastest reachable local path."
+      "Prefers a USB-C or wired network path when available, then local or peer-to-peer Wi-Fi, with Curve25519 key agreement and authenticated encryption."
     case .sshTunnel:
       "Carries the same bounded Eng protocol through a host-key-verified SSH connection."
     }
