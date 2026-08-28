@@ -24,6 +24,7 @@ public actor CodexThreadService {
   private var loadedThreadIDs = Set<String>()
   private var desiredThreadIDs = Set<String>()
   private var subscribedThreadIDs = Set<String>()
+  private var externallyOwnedThreadIDs = Set<String>()
   private var activeTurnIDs: [String: String] = [:]
   private var pendingRequests: [String: PendingServerRequest] = [:]
 
@@ -98,7 +99,11 @@ public actor CodexThreadService {
 
   public func subscribe(threadID: String) async throws -> ThreadDetail {
     desiredThreadIDs.insert(threadID)
-    try await resume(threadID: threadID)
+    do {
+      try await resume(threadID: threadID)
+    } catch let error where Self.isActiveWriterFailure(error) {
+      externallyOwnedThreadIDs.insert(threadID)
+    }
     return try await threadDetail(threadID: threadID)
   }
 
@@ -109,7 +114,13 @@ public actor CodexThreadService {
     pendingRequests.removeAll()
     try await refreshLoadedThreads()
     await subscribeLoadedThreads()
-    for threadID in desiredThreadIDs { try await resume(threadID: threadID) }
+    for threadID in desiredThreadIDs {
+      do {
+        try await resume(threadID: threadID)
+      } catch let error where Self.isActiveWriterFailure(error) {
+        externallyOwnedThreadIDs.insert(threadID)
+      }
+    }
   }
 
   public func threadDetail(threadID: String) async throws -> ThreadDetail {
@@ -122,7 +133,7 @@ public actor CodexThreadService {
       method: "thread/turns/list",
       params: [
         "threadId": .string(threadID),
-        "limit": 60,
+        "limit": 12,
         "sortDirection": "desc",
         "itemsView": "full",
       ]
@@ -144,7 +155,7 @@ public actor CodexThreadService {
 
     return ThreadDetail(
       thread: summary,
-      timeline: mapped.items,
+      timeline: PhoneTimelineWindow.project(mapped.items),
       pendingActions: pendingRequests.values
         .map(\.action)
         .filter { $0.threadID == threadID }
@@ -288,6 +299,7 @@ public actor CodexThreadService {
     if loadedThreadIDs.contains(threadID) && subscribedThreadIDs.contains(threadID) {
       return .live
     }
+    if externallyOwnedThreadIDs.contains(threadID) { return .observe }
     return .message
   }
 
@@ -326,12 +338,19 @@ public actor CodexThreadService {
     )
     subscribedThreadIDs.insert(threadID)
     loadedThreadIDs.insert(threadID)
+    externallyOwnedThreadIDs.remove(threadID)
     if let turns = response["thread"]?["turns"]?.arrayValue {
       let mapped = CodexTimelineMapper.mapTurns(turns, threadID: threadID)
       if let activeTurnID = mapped.activeTurnID {
         activeTurnIDs[threadID] = activeTurnID
       }
     }
+  }
+
+  private static func isActiveWriterFailure(_ error: any Error) -> Bool {
+    guard let failure = error as? AppServerFailure else { return false }
+    return failure.code == -32_600
+      && failure.message.localizedCaseInsensitiveContains("active writer")
   }
 
   private static func runtimeStatus(

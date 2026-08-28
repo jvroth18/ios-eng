@@ -20,6 +20,7 @@ public actor BridgeCoordinator {
   private var reportedWorkspaceShape: String?
   private var lastWorkspace: WorkspaceSnapshot?
   private var lastMacTelemetry: DeviceTelemetry?
+  private var lastSentDetails: [String: ThreadDetail] = [:]
   private var refreshTask: Task<Void, Never>?
   private var telemetryTask: Task<Void, Never>?
   private var eventTask: Task<Void, Never>?
@@ -65,6 +66,7 @@ public actor BridgeCoordinator {
       while !Task.isCancelled {
         try? await Task.sleep(for: .seconds(3))
         await self?.refreshNow()
+        await self?.pollSubscribedDetails()
       }
     }
     telemetryTask = Task { [weak self] in
@@ -197,7 +199,7 @@ public actor BridgeCoordinator {
       case .subscribe(let subscription):
         subscriptions[peer] = subscription.threadID
         let detail = try await service.subscribe(threadID: subscription.threadID)
-        try transport.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
+        try send(detail, to: peer)
       case .sendMessage(let request):
         _ = try await service.sendMessage(threadID: request.threadID, text: request.normalizedText)
         let detail = try await service.threadDetail(threadID: request.threadID)
@@ -357,7 +359,29 @@ public actor BridgeCoordinator {
     guard let threadID = subscriptions[peer],
       let detail = try? await service.threadDetail(threadID: threadID)
     else { return }
-    try? transport.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
+    try? send(detail, to: peer)
+  }
+
+  private func pollSubscribedDetails() async {
+    for peer in subscriptions.keys {
+      guard let threadID = subscriptions[peer],
+        let detail = try? await service.threadDetail(threadID: threadID),
+        detailChanged(detail, from: lastSentDetails[peer])
+      else { continue }
+      try? send(detail, to: peer)
+    }
+  }
+
+  private func send(_ detail: ThreadDetail, to peer: String) throws {
+    try transport.send(BridgeEnvelope(message: .threadDetail(detail)), to: peer)
+    lastSentDetails[peer] = detail
+  }
+
+  private func detailChanged(_ detail: ThreadDetail, from previous: ThreadDetail?) -> Bool {
+    guard let previous else { return true }
+    return detail.thread != previous.thread
+      || detail.timeline != previous.timeline
+      || detail.pendingActions != previous.pendingActions
   }
 
   private func peer(_ peer: String, changed state: BridgeTransportPeerState) {
@@ -374,6 +398,7 @@ public actor BridgeCoordinator {
     if state != .connected {
       pairedPeers.remove(peer)
       subscriptions.removeValue(forKey: peer)
+      lastSentDetails.removeValue(forKey: peer)
       phoneAnalytics.removeValue(forKey: peer)
       reportedPhoneTelemetryPeers.remove(peer)
       reportedLinkTelemetryPeers.remove(peer)

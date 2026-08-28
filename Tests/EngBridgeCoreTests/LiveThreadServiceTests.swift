@@ -32,6 +32,31 @@ struct LiveThreadServiceTests {
     #expect(!methods.contains("thread/archive"))
   }
 
+  @Test func activeWriterStillOpensAsAReadableMacLiveThread() async throws {
+    let client = MockAppServerClient()
+    await client.enqueue(method: "thread/loaded/list", response: ["data": []])
+    await client.enqueue(
+      method: "thread/list",
+      response: ["data": [Self.thread(status: "active")], "nextCursor": nil]
+    )
+    await client.enqueueFailure(
+      method: "thread/resume",
+      failure: AppServerFailure(
+        code: -32_600,
+        message: "thread thread-1 already has an active writer"
+      ))
+    await client.enqueue(method: "thread/turns/list", response: ["data": [Self.activeTurn]])
+    let service = CodexThreadService(connection: client, bridgeName: "Test Mac")
+
+    _ = try await service.refreshWorkspace()
+    let detail = try await service.subscribe(threadID: "thread-1")
+
+    #expect(detail.thread.controlLevel == .observe)
+    #expect(detail.thread.activeTurnID == "turn-1")
+    #expect(!detail.timeline.isEmpty)
+    #expect(!(await service.isSubscribed(threadID: "thread-1")))
+  }
+
   @Test func recoveryResumesEveryDesiredPhoneSubscription() async throws {
     let client = MockAppServerClient()
     await client.enqueue(method: "thread/loaded/list", response: ["data": []])
@@ -134,7 +159,10 @@ struct LiveThreadServiceTests {
   }
 
   private static let activeTurn: JSONValue = [
-    "id": "turn-1", "status": "inProgress", "items": [],
+    "id": "turn-1", "status": "inProgress",
+    "items": [
+      ["type": "agentMessage", "id": "message-1", "text": "Working on the Mac"]
+    ],
   ]
 
   private static func thread(status: String) -> JSONValue {
@@ -151,7 +179,7 @@ struct LiveThreadServiceTests {
 
 private actor MockAppServerClient: AppServerClient {
   nonisolated let events: AsyncStream<AppServerInbound>
-  private var responses: [String: [JSONValue]] = [:]
+  private var responses: [String: [Result<JSONValue, AppServerFailure>]] = [:]
   private(set) var requestedMethods: [String] = []
 
   init() {
@@ -159,7 +187,11 @@ private actor MockAppServerClient: AppServerClient {
   }
 
   func enqueue(method: String, response: JSONValue) {
-    responses[method, default: []].append(response)
+    responses[method, default: []].append(.success(response))
+  }
+
+  func enqueueFailure(method: String, failure: AppServerFailure) {
+    responses[method, default: []].append(.failure(failure))
   }
 
   func request(method: String, params: JSONValue) throws -> JSONValue {
@@ -167,9 +199,9 @@ private actor MockAppServerClient: AppServerClient {
     guard var values = responses[method], !values.isEmpty else {
       throw AppServerFailure(message: "No mock response for \(method)")
     }
-    let value = values.removeFirst()
+    let result = values.removeFirst()
     responses[method] = values
-    return value
+    return try result.get()
   }
 
   func respond(id: JSONValue, result: JSONValue) {}

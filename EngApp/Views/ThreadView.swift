@@ -243,7 +243,7 @@ struct ThreadView: View {
         ? "Live — starts a new turn in this existing thread"
         : "Live — steers the active turn"
     case .message: "Connecting this existing thread for live control"
-    case .observe: "Read-only mirror of this thread"
+    case .observe: "Mac Live — following the active writer on your Mac"
     }
   }
 }

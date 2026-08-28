@@ -553,7 +553,7 @@ extension ThreadRuntimeStatus {
 extension ThreadControlLevel {
   var presentationLabel: String {
     switch self {
-    case .observe: "Read only"
+    case .observe: "Mac Live"
     case .message: "Available"
     case .live: "Live"
     }

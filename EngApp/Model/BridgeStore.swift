@@ -397,10 +397,12 @@ final class BridgeStore: ObservableObject {
     }
     var unmatchedServerUsers = detail.timeline.filter { $0.kind == .user }
     pending.removeAll { optimistic in
-      guard let match = unmatchedServerUsers.firstIndex(where: {
-        messagesMatch(optimistic, $0)
-          && $0.timestamp >= optimistic.timestamp.addingTimeInterval(-30)
-      }) else { return false }
+      guard
+        let match = unmatchedServerUsers.firstIndex(where: {
+          messagesMatch(optimistic, $0)
+            && $0.timestamp >= optimistic.timestamp.addingTimeInterval(-30)
+        })
+      else { return false }
       unmatchedServerUsers.remove(at: match)
       return true
     }
