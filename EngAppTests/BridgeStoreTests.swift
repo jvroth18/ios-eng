@@ -374,6 +374,21 @@ struct BridgeStoreTests {
     #expect(subscriptions == ["t1", "t1"])
   }
 
+  @Test func reopeningSameThreadPreservesItsTimelineDuringRefresh() {
+    let (store, _) = Self.makeStore()
+    let first = Self.thread("t1")
+    store.receive(
+      BridgeEnvelope(
+        message: .threadDetail(
+          ThreadDetail(thread: first, timeline: [Self.item("answer", body: "Ready")]))))
+
+    store.subscribe(to: first)
+    #expect(store.threadDetail?.timeline.first?.body == "Ready")
+
+    store.subscribe(to: Self.thread("t2"))
+    #expect(store.threadDetail == nil)
+  }
+
   @Test func debugAutomaticPairingDoesNotFirstSendAnEmptyTrustedCode() async {
     let client = FakeBridgeClient()
     let store = BridgeStore(

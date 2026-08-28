@@ -248,7 +248,7 @@ final class BridgeStore: ObservableObject {
       #endif
       return
     }
-    threadDetail = nil
+    if threadDetail?.thread.id != thread.id { threadDetail = nil }
     selectedThreadID = thread.id
     send(.subscribe(ThreadSubscription(threadID: thread.id)))
   }

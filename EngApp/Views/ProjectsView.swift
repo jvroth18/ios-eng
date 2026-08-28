@@ -7,7 +7,7 @@ struct ProjectsView: View {
   @State private var activeOnly = false
   @State private var collapsedProjects: Set<String> = []
   @State private var expandedProjects: Set<String> = []
-  @State private var presentedThread: ThreadSummary?
+  @Namespace private var threadTransition
 
   /// Threads shown per project before the "more" row appears.
   static let previewThreadLimit = 6
@@ -49,7 +49,7 @@ struct ProjectsView: View {
                 onToggleCollapse: { toggle(entry.project.id, in: &collapsedProjects) },
                 onToggleShowAll: { toggle(entry.project.id, in: &expandedProjects) },
                 onTogglePin: { store.toggleProjectPin(entry.project.id) },
-                onOpenThread: { presentedThread = $0 }
+                transitionNamespace: threadTransition
               )
             }
           }
@@ -60,9 +60,6 @@ struct ProjectsView: View {
       .refreshable { store.refresh() }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .sunkenPaper()
-    }
-    .fullScreenCover(item: $presentedThread) { thread in
-      ThreadView(thread: thread)
     }
   }
 
@@ -149,7 +146,7 @@ private struct ProjectNode: View {
   let onToggleCollapse: () -> Void
   let onToggleShowAll: () -> Void
   let onTogglePin: () -> Void
-  let onOpenThread: (ThreadSummary) -> Void
+  let transitionNamespace: Namespace.ID
 
   private var visibleThreads: ArraySlice<ThreadSummary> {
     showsAll ? threads[...] : threads.prefix(ProjectsView.previewThreadLimit)
@@ -205,10 +202,12 @@ private struct ProjectNode: View {
 
       if !collapsed {
         ForEach(visibleThreads) { thread in
-          Button {
-            onOpenThread(thread)
+          NavigationLink {
+            ThreadView(thread: thread)
+              .navigationTransition(.zoom(sourceID: thread.id, in: transitionNamespace))
           } label: {
             ThreadRow(thread: thread)
+              .matchedTransitionSource(id: thread.id, in: transitionNamespace)
           }
           .buttonStyle(Win95RowStyle())
         }

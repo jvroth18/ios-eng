@@ -7,6 +7,11 @@ LED. The toolbar status and running-item LEDs remain steadily lit, preventing th
 independent blink loops from competing while a thread is working. This repair is
 released as Eng 0.5.2 (build 8).
 
+Thread opening uses the iOS 18 source-to-destination zoom transition keyed by the
+exact thread UUID. Reopening the same conversation preserves its existing timeline
+while the subscription refreshes instead of clearing to a loading screen. This
+transition repair is released as Eng 0.5.3 (build 9).
+
 ## Contracts and unit coverage
 
 - `swift format lint --strict` passes across app, bridge, shared sources, tests, and scripts.
