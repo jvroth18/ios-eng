@@ -20,6 +20,13 @@ catalog and applies an exact `thread/settings/update` only to a bridge-owned exi
 thread. Active turns label the choice `Next turn`; `Mac Live` threads disclose that
 the owning Mac process controls their model.
 
+Eng 0.6.1 (build 11) adds reversible phone-local thread hiding. Each visible row
+has an explicit eye-slash action; Config lists the hidden threads with Unhide and
+Unhide all controls. Hidden UUIDs persist across relaunch, hidden activity stays out
+of visible unread notifications and counts, and saved drafts remain recoverable.
+The bridge protocol is unchanged because hiding never archives, deletes, or mutates
+the Mac thread.
+
 ## Contracts and unit coverage
 
 - `swift format lint --strict` passes across app, bridge, shared sources, tests, and scripts.
@@ -29,7 +36,7 @@ the owning Mac process controls their model.
 
 ## Native app build and installation
 
-- Xcode simulator tests pass 33 tests with 0 failures on iPhone 17 Pro.
+- Xcode simulator tests pass 34 tests with 0 failures on iPhone 17 Pro.
 - A Release `iphoneos` build succeeds with Apple Development signing and automatic provisioning for bundle `dev.jvroth.eng`.
 - The last installed Release artifact before the active-writer repair was `Eng` version `0.2.0` (build `2`).
 - The configuration release `Eng` version `0.4.0` (build `4`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as a live `/Eng.app/Eng` process.

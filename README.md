@@ -47,6 +47,11 @@ threads, the Model menu is populated from the signed-in Codex account and change
 the model for subsequent turns in that existing thread; a `Mac Live` thread remains
 truthfully controlled by its owning Mac process.
 
+Each project thread row also has an eye-slash control that hides the thread only
+from this iPhone. Hidden threads remain intact on the Mac, keep their drafts, stay
+out of visible unread/draft counts, and can be restored individually or together
+from Config. Hiding never sends an archive or delete operation to Codex.
+
 ## Status
 
 This repository was delivered in validated, incremental commits:
@@ -86,7 +91,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 open Eng.xcodeproj
 ```
 
-The generated Xcode project is intentionally ignored; `project.yml` is its source of truth. The debug-only `-eng-demo`, `-eng-analytics`, and `-eng-thread` launch arguments render deterministic project, analytics, and thread states for visual QA without altering release behavior. `-eng-pair-code CODE` automates pairing only in debug builds for repeatable simulator integration tests.
+The generated Xcode project is intentionally ignored; `project.yml` is its source of truth. The debug-only `-eng-demo`, `-eng-analytics`, `-eng-config`, and `-eng-thread` launch arguments render deterministic project, analytics, configuration, and thread states for visual QA without altering release behavior. `-eng-pair-code CODE` automates pairing only in debug builds for repeatable simulator integration tests.
 
 The first phone opened during the bridge pairing window is remembered automatically. The short Mac-terminal code remains available for a replacement phone; normal reconnects do not require it. For USB-C, enable iPhone Personal Hotspot and connect the trusted cable so Apple exposes an `iPhone USB` network interface to Network Framework. Analytics retains only the most recent 90 in-memory samples per device. Exact iPhone temperature is not available through Apple’s public API, so Eng reports `ProcessInfo.thermalState` categories instead of degrees.
 

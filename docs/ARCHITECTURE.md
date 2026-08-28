@@ -102,6 +102,12 @@ preserves unfinished text without mixing drafts between threads. Keyboard appear
 animates the complete conversation window upward while the timeline remains the
 flexible region, keeping the composer and surrounding chat context together.
 
+Hidden-thread state is also keyed by thread UUID in iPhone preferences. The project
+explorer filters those rows locally and Config provides individual and bulk restore
+controls. Hidden activity does not create a visible unread banner or count, but any
+saved draft remains recoverable after unhide. No hide action crosses the bridge, so
+the Mac thread is never archived, deleted, or otherwise mutated.
+
 ## Failure behavior
 
 - Connection loss keeps the last snapshot visible with a stale timestamp and reconnects nearby.
