@@ -5,7 +5,7 @@ Validated on August 27, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 ## Contracts and unit coverage
 
 - `swift format lint --strict` passes across app, bridge, shared sources, tests, and scripts.
-- `swift test` passes 35 tests in 11 suites.
+- `swift test` passes 41 tests in 13 suites.
 - Coverage includes protocol round trips, encrypted-pairing gates, Git-root grouping, App Server event and request mapping, public Mac telemetry, link classification, a real 64 KB probe payload, lossless workspace paging, App Server supervision, subscription recovery, active-turn steering, idle existing-thread turns, and the phone command allowlist.
 - The paging stress fixture carries 245 threads, keeps every encoded frame below the Multipeer Connectivity resource ceiling, and reassembles without loss.
 
@@ -13,7 +13,7 @@ Validated on August 27, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 
 - Xcode simulator tests pass 17 tests with 0 failures on iPhone 17 Pro.
 - A Release `iphoneos` build succeeds with Apple Development signing and automatic provisioning for bundle `dev.jvroth.eng`.
-- The exact Release artifact installs on the paired physical iPhone as `Eng` version `0.2.0` (build `2`).
+- The last installed Release artifact before the active-writer repair was `Eng` version `0.2.0` (build `2`).
 - `devicectl` launches the installed bundle and reads back its live `/Eng.app/Eng` process.
 
 ## August 28 Codex activity mirror
@@ -24,6 +24,14 @@ Validated on August 27, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - The thread surface shows `Thinking` as soon as a message is sent, then derives `Writing response`, `Updating plan`, `Running command`, `Editing files`, `Using tool`, or approval/input waiting states from the actual streamed App Server timeline.
 - The activity mirror presents observable Codex operations only; it does not fabricate or expose private chain-of-thought.
 - After installing and launching version `0.2.0` (build `2`) on the physical iPhone, the bridge recorded a fresh encrypted Nearby pairing, Wi-Fi phone diagnostics, and a measured 172.2 ms / 0.76 MB/s link sample. Both `/readyz` and `/healthz` returned HTTP 200, and the post-launch log window contained no App Server connection error.
+
+## August 28 active-writer repair
+
+- A live protocol probe proved `thread/turns/list` returns the observable transcript while `thread/resume` is rejected because another Codex process owns the writer lock.
+- Selecting that thread now falls back to `Mac Live`, sends a bounded recent timeline frame, and polls for changes every three seconds instead of presenting the active-writer error.
+- Phone messages for `Mac Live` threads use the installed `codex queue` command and never create or resume a duplicate thread.
+- Stop mirrors Ctrl-C only when the writer lock identifies exactly one same-user interactive Codex CLI process. GUI, noninteractive, ambiguous, and unverified owners fail closed.
+- Core tests cover active-writer fallback, bounded timeline projection, queued messages, external Stop routing, and writer-process validation. The simulator suite remains at 17 tests with 0 failures.
 
 ## Live Codex mirror
 
