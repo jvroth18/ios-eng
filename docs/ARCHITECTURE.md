@@ -80,6 +80,22 @@ Both devices sample only public, user-space signals:
 
 iOS does not expose an exact device temperature to a normal app. Eng therefore reports Apple's thermal pressure categories (`nominal`, `fair`, `serious`, `critical`) and never fabricates degrees. Mac temperature follows the same public-API boundary; privileged tools are intentionally excluded.
 
+## Conversation presentation and unread state
+
+The project explorer presents a thread with `fullScreenCover`, so the conversation
+owns the phone display until Back or Close dismisses it. Repository metadata remains
+in the explorer rather than taking space from the message timeline. Message bodies
+are parsed locally into headings, paragraphs, lists, quotes, and fenced code blocks;
+inline Markdown supplies emphasis and links. Formatting never changes or executes
+the transported content.
+
+Unread tracking compares each thread's latest update timestamp with its previously
+observed timestamp. The first workspace is a baseline, unchanged refreshes do not
+produce notifications, and activity in the visible conversation stays read. Newer
+background activity persists the thread UUID in app preferences, produces an
+in-app banner, and appears as project, tab, status-bar, and thread-row counts. Opening
+the exact conversation clears its unread state. Removed threads are pruned.
+
 ## Failure behavior
 
 - Connection loss keeps the last snapshot visible with a stale timestamp and reconnects nearby.

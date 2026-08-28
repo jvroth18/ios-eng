@@ -33,6 +33,12 @@ plans, commands, file edits, tools, web activity, and compaction update the same
 stable row throughout their lifecycle. Eng displays observable reasoning summaries
 when Codex emits them, but never forwards raw or encrypted private reasoning.
 
+Opening a thread presents a dedicated full-screen conversation without the project
+tabs or repository metadata panel. Assistant and user messages render headings,
+emphasis, links, lists, quotes, and fenced code blocks. Background activity marks
+the exact thread unread, shows an in-app banner plus project/thread badges, persists
+across launches, and clears when that conversation is opened.
+
 ## Status
 
 This repository was delivered in validated, incremental commits:

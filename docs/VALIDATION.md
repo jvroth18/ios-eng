@@ -11,12 +11,21 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 
 ## Native app build and installation
 
-- Xcode simulator tests pass 25 tests with 0 failures on iPhone 17 Pro.
+- Xcode simulator tests pass 30 tests with 0 failures on iPhone 17 Pro.
 - A Release `iphoneos` build succeeds with Apple Development signing and automatic provisioning for bundle `dev.jvroth.eng`.
 - The last installed Release artifact before the active-writer repair was `Eng` version `0.2.0` (build `2`).
 - The configuration release `Eng` version `0.4.0` (build `4`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as a live `/Eng.app/Eng` process.
 - The oversized-thread repair release `Eng` version `0.4.1` (build `5`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back at its new `/Eng.app/Eng` installation path.
 - The live-activity release `Eng` version `0.5.0` (build `6`) was built with Apple Development signing, installed on the paired physical iPhone, launched with `devicectl`, and read back as the live `/Eng.app/Eng` process.
+- The full-screen conversation and unread-indicator release candidate is `Eng` version `0.5.1` (build `7`).
+
+## August 28 full-screen conversation, formatting, and unread activity
+
+- Project thread rows open an explicit full-screen cover. The rendered conversation has its own Back and Close controls and does not retain the project tabs or repository metadata panel.
+- Message formatting tests cover headings, paragraphs, inline emphasis and links, bullets, numbered lists, quotes, fenced code, and an unclosed streaming code fence.
+- Unread tests prove that the first workspace establishes a baseline, a newer background timestamp marks only that thread, visible activity stays read, activity after dismissal becomes unread, opening clears the state, and unread UUIDs persist across store instances.
+- Visual simulator QA confirmed the full-screen conversation layout and its formatted heading, bold text, bullet list, and code block. A separate project render confirmed the in-app banner, Projects tab count, status count, project count, and exact thread `NEW` badge without obscuring the title bar.
+- The iPhone simulator passes 30 tests with 0 failures.
 - `devicectl` launches the installed bundle and reads back its live `/Eng.app/Eng` process.
 
 ## August 28 Codex activity mirror
@@ -36,7 +45,7 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - Loaded external writers are remembered after the first active-writer response, so periodic workspace refresh and subscription recovery do not repeatedly retry `thread/resume` or create an App Server reconnect loop.
 - Phone messages for `Mac Live` threads use the installed `codex queue` command and never create or resume a duplicate thread.
 - Stop mirrors Ctrl-C only when the writer lock identifies exactly one same-user interactive Codex CLI process. GUI, noninteractive, ambiguous, and unverified owners fail closed.
-- Core tests cover active-writer fallback, bounded timeline projection, queued messages, external Stop routing, complete owned-process-tree shutdown, and writer-process validation. The simulator suite passes 25 tests with 0 failures.
+- Core tests cover active-writer fallback, bounded timeline projection, queued messages, external Stop routing, complete owned-process-tree shutdown, and writer-process validation. The simulator suite passes 30 tests with 0 failures.
 
 ## August 28 stable-item and Mac Live journal stream
 
@@ -44,7 +53,7 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - Commentary and final-answer phases remain distinct in the phone presentation. Only observable reasoning summaries are projected; raw reasoning text is ignored.
 - Structured notification coverage includes plans, commands and terminal interaction, file patch deltas, MCP and dynamic tools, collaboration/subagent activity, web search, image view/generation, sleep, review mode, hooks, diffs, and context compaction.
 - The external-thread reader resolves the exact thread UUID, initially tails no more than 4 MB, consumes only appended bytes afterward, and retains 120 projected items. Privacy tests reject session metadata, raw response records, encrypted reasoning, other-thread records, and unknown record types.
-- Core coverage passes 49 tests in 15 suites. The iPhone simulator passes 25 tests with 0 failures.
+- Core coverage passes 49 tests in 15 suites. The iPhone simulator passes 30 tests with 0 failures.
 - Desktop companion 3.9 (build 12) was installed with an embedded bridge SHA-256 matching the tested release binary. The canonical app launched a fresh bridge-owned App Server on port 60388, and both `/readyz` and `/healthz` returned HTTP 200.
 - Eng 0.5.0 reconnected from the physical iPhone over the encrypted direct-local route and received 912 threads across 170 projects in 10 bounded frames. The scoped launch log contained one App Server connection and no `Message too long`, not-connected error, bridge failure, or reconnect loop.
 - Before deployment, the prior desktop app was stopped and its current process tree exited. A separately confirmed orphaned listener from an older restart on port 54496 was terminated by its exact process identifiers; unrelated ChatGPT App Server processes were not touched. The replaced 3.8 app remains recoverable as `Amphetamine Switch 3.8 pre-3.9.app`.
@@ -54,7 +63,7 @@ Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 P
 - The reproduced failure was an oversized full-history App Server WebSocket response, not an oversized phone-authored message. A persisted turn containing large command output exceeded Foundation's default inbound WebSocket ceiling before Eng could project it.
 - Historical `thread/turns/list` requests now use the installed App Server's supported `summary` items view. The loopback Mac client has an explicit 16 MB guarded receive ceiling for legitimate live events, and every mapped live timeline event is projected before phone transport.
 - Workspace refresh preserves the existing project order and each project's existing thread order while applying current status, summary, timestamps, and control state. New entries appear once and removed entries disappear; routine five-second refreshes no longer reshuffle the visible list.
-- Regression tests assert the summary request and stable ordering across status/time changes, additions, and removals. Core tests pass 49 tests in 15 suites and the iPhone simulator passes 25 tests with 0 failures.
+- Regression tests assert the summary request and stable ordering across status/time changes, additions, and removals. Core tests pass 49 tests in 15 suites and the iPhone simulator passes 30 tests with 0 failures.
 - A live initialized App Server probe requested the exact formerly failing thread `01a0443a-e741-70f2-8738-760a9a5d4332` with `itemsView: summary` and received all 12 requested turn summaries without disconnecting.
 - Desktop companion 3.8 (build 11) was installed with an embedded bridge hash matching the tested release binary. Its fresh App Server on port 54496 returned HTTP 200 from `/readyz` and `/healthz`.
 - Eng 0.4.1 reconnected from the physical iPhone over the encrypted direct-local route, received all 912 threads in 10 bounded frames, and reported nominal thermal state. The post-launch log window contained one App Server connection, no `Message too long`, and no bridge-operation failure or reconnect loop.
