@@ -40,6 +40,34 @@ struct TimelineEventReducerTests {
     #expect(timeline[0] == completed)
   }
 
+  @Test func commandOutputKeepsTheExactStartedCommandTitle() {
+    let started = TimelineItem(
+      id: "command-1",
+      threadID: "thread-1",
+      turnID: "turn-1",
+      kind: .command,
+      state: .running,
+      title: "swift test",
+      body: "",
+      timestamp: Date(timeIntervalSince1970: 1)
+    )
+    let output = TimelineItem(
+      id: "command-1",
+      threadID: "thread-1",
+      turnID: "turn-1",
+      kind: .command,
+      state: .running,
+      title: "Command output",
+      body: "All tests passed",
+      timestamp: Date(timeIntervalSince1970: 2)
+    )
+
+    let timeline = TimelineEventReducer.merge(output, into: [started])
+
+    #expect(timeline[0].title == "swift test")
+    #expect(timeline[0].body == "All tests passed")
+  }
+
   private func item(
     id: String,
     body: String,

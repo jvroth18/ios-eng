@@ -13,7 +13,7 @@ enum TimelineEventReducer {
           turnID: existing.turnID ?? item.turnID,
           kind: item.kind,
           state: .running,
-          title: item.title.isEmpty ? existing.title : item.title,
+          title: preferredTitle(item.title, over: existing.title),
           body: appendDelta(item.body, to: existing.body),
           assistantPhase: item.assistantPhase ?? existing.assistantPhase,
           timestamp: existing.timestamp
@@ -31,5 +31,13 @@ enum TimelineEventReducer {
   private static func appendDelta(_ delta: String, to existing: String) -> String {
     guard !delta.isEmpty else { return existing }
     return existing + delta
+  }
+
+  private static func preferredTitle(_ candidate: String, over existing: String) -> String {
+    guard !existing.isEmpty else { return candidate }
+    let continuationTitles = [
+      "Command output", "File changes", "Plan", "Terminal input", "Tool progress",
+    ]
+    return continuationTitles.contains(candidate) ? existing : candidate
   }
 }

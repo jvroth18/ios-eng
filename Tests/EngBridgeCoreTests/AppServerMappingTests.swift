@@ -143,6 +143,98 @@ struct AppServerMappingTests {
       ) == nil)
   }
 
+  @Test func mapsPlanDiffTerminalToolAndCompactionNotifications() throws {
+    let plan = try #require(
+      CodexTimelineMapper.mapEvent(
+        method: "turn/plan/updated",
+        params: [
+          "threadId": "thread-1", "turnId": "turn-1", "explanation": "Validation plan",
+          "plan": [
+            ["step": "Inspect", "status": "completed"],
+            ["step": "Test", "status": "inProgress"],
+          ],
+        ]
+      )
+    )
+    #expect(plan.id == "turn-plan:turn-1")
+    #expect(plan.body == "Validation plan\n✓ Inspect\n• Test")
+
+    let diff = try #require(
+      CodexTimelineMapper.mapEvent(
+        method: "turn/diff/updated",
+        params: ["threadId": "thread-1", "turnId": "turn-1", "diff": "+fixed"]
+      )
+    )
+    #expect(diff.id == "turn-diff:turn-1")
+    #expect(diff.kind == .fileChange)
+
+    let terminal = try #require(
+      CodexTimelineMapper.mapEvent(
+        method: "item/commandExecution/terminalInteraction",
+        params: [
+          "threadId": "thread-1", "turnId": "turn-1", "itemId": "command-1",
+          "stdin": "yes\n",
+        ]
+      )
+    )
+    #expect(terminal.id == "command-1")
+    #expect(terminal.body == "\n› yes\n")
+
+    let progress = try #require(
+      CodexTimelineMapper.mapEvent(
+        method: "item/mcpToolCall/progress",
+        params: [
+          "threadId": "thread-1", "turnId": "turn-1", "itemId": "tool-1",
+          "message": "Loading results",
+        ]
+      )
+    )
+    #expect(progress.id == "tool-1")
+    #expect(progress.kind == .tool)
+
+    let compaction = try #require(
+      CodexTimelineMapper.mapEvent(
+        method: "thread/compacted",
+        params: ["threadId": "thread-1", "turnId": "turn-1"]
+      )
+    )
+    #expect(compaction.kind == .system)
+    #expect(compaction.title == "Context compacted")
+  }
+
+  @Test func mapsEveryStructuredTerminalActivityWithoutRawFallbackText() throws {
+    let items: [(JSONValue, TimelineKind, String)] = [
+      (
+        [
+          "type": "mcpToolCall", "id": "tool-1", "server": "github", "tool": "status",
+          "status": "inProgress", "arguments": ["repo": "ios-eng"],
+        ], .tool, "github.status"
+      ),
+      (
+        [
+          "type": "subAgentActivity", "id": "agent-1", "kind": "started",
+          "agentPath": "/root/tester",
+        ], .tool, "Agent started"
+      ),
+      (
+        ["type": "webSearch", "id": "search-1", "query": "Codex App Server"], .tool,
+        "Web search"
+      ),
+      (["type": "contextCompaction", "id": "compact-1"], .system, "Context compacted"),
+    ]
+
+    for (index, expected) in items.enumerated() {
+      let turn: JSONValue = [
+        "id": .string("turn-\(index)"), "status": "completed", "startedAt": 1_700_000_000,
+        "items": [expected.0],
+      ]
+      let mapped = CodexTimelineMapper.mapTurns([turn], threadID: "thread-1")
+      let item = try #require(mapped.items.first)
+      #expect(item.kind == expected.1)
+      #expect(item.title == expected.2)
+    }
+  }
+
   @Test func preservesServerRequestIDForPhoneResponse() async throws {
     let service = CodexThreadService(connection: AppServerConnection(), bridgeName: "Test Mac")
     let action = try #require(

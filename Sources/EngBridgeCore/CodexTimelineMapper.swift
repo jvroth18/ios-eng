@@ -40,7 +40,7 @@ public enum CodexTimelineMapper {
   public static func mapEvent(method: String, params: JSONValue) -> TimelineItem? {
     guard let threadID = params["threadId"]?.stringValue else { return nil }
     let turnID = params["turnId"]?.stringValue
-    let now = Date()
+    let now = eventTimestamp(params) ?? Date()
 
     if method == "item/agentMessage/delta", let delta = params["delta"]?.stringValue {
       return TimelineItem(
@@ -104,6 +104,90 @@ public enum CodexTimelineMapper {
         state: .running,
         title: "Thinking",
         body: delta,
+        timestamp: now
+      )
+    }
+
+    if method == "turn/plan/updated" {
+      let explanation = params["explanation"]?.stringValue
+      let steps = planText(params["plan"])
+      return TimelineItem(
+        id: "turn-plan:\(turnID ?? threadID)",
+        threadID: threadID,
+        turnID: turnID,
+        kind: .plan,
+        state: .running,
+        title: "Plan",
+        body: [explanation, steps].compactMap { value in
+          guard let value, !value.isEmpty else { return nil }
+          return value
+        }.joined(separator: "\n"),
+        timestamp: now
+      )
+    }
+
+    if method == "turn/diff/updated", let diff = params["diff"]?.stringValue {
+      return TimelineItem(
+        id: "turn-diff:\(turnID ?? threadID)",
+        threadID: threadID,
+        turnID: turnID,
+        kind: .fileChange,
+        state: .running,
+        title: "Turn diff",
+        body: diff,
+        timestamp: now
+      )
+    }
+
+    if method == "item/commandExecution/terminalInteraction",
+      let input = params["stdin"]?.stringValue
+    {
+      return streamingItem(
+        kind: .command,
+        title: "Terminal input",
+        body: "\n› \(input)",
+        itemID: params["itemId"]?.stringValue,
+        threadID: threadID,
+        turnID: turnID,
+        now: now
+      )
+    }
+
+    if method == "item/fileChange/patchUpdated", let changes = params["changes"] {
+      return streamingItem(
+        kind: .fileChange,
+        title: "File changes",
+        body: changes.compactDescription(limit: 6_000),
+        itemID: params["itemId"]?.stringValue,
+        threadID: threadID,
+        turnID: turnID,
+        now: now
+      )
+    }
+
+    if method == "item/mcpToolCall/progress",
+      let message = params["message"]?.stringValue
+    {
+      return streamingItem(
+        kind: .tool,
+        title: "Tool progress",
+        body: message,
+        itemID: params["itemId"]?.stringValue,
+        threadID: threadID,
+        turnID: turnID,
+        now: now
+      )
+    }
+
+    if method == "thread/compacted" {
+      return TimelineItem(
+        id: "compaction:\(turnID ?? threadID)",
+        threadID: threadID,
+        turnID: turnID,
+        kind: .system,
+        state: .completed,
+        title: "Context compacted",
+        body: "Codex compacted earlier context to continue the thread.",
         timestamp: now
       )
     }
@@ -211,7 +295,7 @@ public enum CodexTimelineMapper {
         kind: .plan,
         state: state,
         title: "Plan",
-        body: planText(item["items"]),
+        body: item["text"]?.stringValue ?? planText(item["items"]),
         timestamp: timestamp
       )
     case "commandExecution":
@@ -236,17 +320,127 @@ public enum CodexTimelineMapper {
         body: item["changes"]?.compactDescription(limit: 2_000) ?? "",
         timestamp: timestamp
       )
-    case "mcpToolCall", "dynamicToolCall", "collabAgentToolCall", "webSearch":
+    case "mcpToolCall", "dynamicToolCall":
+      let namespace = item["server"]?.stringValue ?? item["namespace"]?.stringValue
       let tool = item["tool"]?.stringValue ?? item["name"]?.stringValue ?? type
+      let title = [namespace, tool].compactMap { $0 }.joined(separator: ".")
       return TimelineItem(
         id: id,
         threadID: threadID,
         turnID: turnID,
         kind: .tool,
         state: state,
-        title: tool,
+        title: title,
         body: item["result"]?.compactDescription(limit: 2_000)
+          ?? item["contentItems"]?.compactDescription(limit: 2_000)
           ?? item["arguments"]?.compactDescription(limit: 2_000) ?? "",
+        timestamp: timestamp
+      )
+    case "collabAgentToolCall":
+      return TimelineItem(
+        id: id,
+        threadID: threadID,
+        turnID: turnID,
+        kind: .tool,
+        state: state,
+        title: readableTitle(item["tool"]?.stringValue ?? "Agent collaboration"),
+        body: item["prompt"]?.stringValue
+          ?? item["agentsStates"]?.compactDescription(limit: 2_000) ?? "",
+        timestamp: timestamp
+      )
+    case "subAgentActivity":
+      let kind = item["kind"]?.stringValue ?? "activity"
+      let subAgentState: TimelineState =
+        switch kind {
+        case "completed": .completed
+        case "interrupted": .interrupted
+        default: .running
+        }
+      return TimelineItem(
+        id: id,
+        threadID: threadID,
+        turnID: turnID,
+        kind: .tool,
+        state: subAgentState,
+        title: "Agent \(readableTitle(kind).lowercased())",
+        body: item["agentPath"]?.stringValue ?? item["agentThreadId"]?.stringValue ?? "",
+        timestamp: timestamp
+      )
+    case "webSearch":
+      return TimelineItem(
+        id: id,
+        threadID: threadID,
+        turnID: turnID,
+        kind: .tool,
+        state: state,
+        title: "Web search",
+        body: item["query"]?.stringValue ?? "",
+        timestamp: timestamp
+      )
+    case "imageView":
+      return TimelineItem(
+        id: id,
+        threadID: threadID,
+        turnID: turnID,
+        kind: .tool,
+        state: state,
+        title: "Viewed image",
+        body: item["path"]?.stringValue ?? "",
+        timestamp: timestamp
+      )
+    case "imageGeneration":
+      return TimelineItem(
+        id: id,
+        threadID: threadID,
+        turnID: turnID,
+        kind: .tool,
+        state: state,
+        title: "Generating image",
+        body: "",
+        timestamp: timestamp
+      )
+    case "sleep":
+      return TimelineItem(
+        id: id,
+        threadID: threadID,
+        turnID: turnID,
+        kind: .tool,
+        state: state,
+        title: "Waiting",
+        body: item.compactDescription(limit: 1_000),
+        timestamp: timestamp
+      )
+    case "contextCompaction":
+      return TimelineItem(
+        id: id,
+        threadID: threadID,
+        turnID: turnID,
+        kind: .system,
+        state: .completed,
+        title: "Context compacted",
+        body: "Codex compacted earlier context to continue the thread.",
+        timestamp: timestamp
+      )
+    case "enteredReviewMode", "exitedReviewMode":
+      return TimelineItem(
+        id: id,
+        threadID: threadID,
+        turnID: turnID,
+        kind: .system,
+        state: state,
+        title: type == "enteredReviewMode" ? "Review started" : "Review completed",
+        body: item["review"]?.stringValue ?? "",
+        timestamp: timestamp
+      )
+    case "hookPrompt":
+      return TimelineItem(
+        id: id,
+        threadID: threadID,
+        turnID: turnID,
+        kind: .system,
+        state: state,
+        title: "Hook activity",
+        body: "",
         timestamp: timestamp
       )
     default:
@@ -299,6 +493,11 @@ public enum CodexTimelineMapper {
 
   private static func streamItemID(_ params: JSONValue, fallback: String) -> String {
     params["itemId"]?.stringValue ?? fallback
+  }
+
+  private static func eventTimestamp(_ params: JSONValue) -> Date? {
+    let milliseconds = params["startedAtMs"]?.doubleValue ?? params["completedAtMs"]?.doubleValue
+    return milliseconds.map { Date(timeIntervalSince1970: $0 / 1_000) }
   }
 
   private static func date(fromEpoch value: Double?) -> Date? {
