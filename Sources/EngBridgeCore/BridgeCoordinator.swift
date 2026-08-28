@@ -22,6 +22,7 @@ public actor BridgeCoordinator {
   private var lastMacTelemetry: DeviceTelemetry?
   private var lastSentDetails: [String: ThreadDetail] = [:]
   private var refreshTask: Task<Void, Never>?
+  private var subscriptionTask: Task<Void, Never>?
   private var telemetryTask: Task<Void, Never>?
   private var eventTask: Task<Void, Never>?
 
@@ -66,6 +67,11 @@ public actor BridgeCoordinator {
       while !Task.isCancelled {
         try? await Task.sleep(for: .seconds(3))
         await self?.refreshNow()
+      }
+    }
+    subscriptionTask = Task { [weak self] in
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(1))
         await self?.pollSubscribedDetails()
       }
     }
@@ -85,6 +91,7 @@ public actor BridgeCoordinator {
 
   public func stop() {
     refreshTask?.cancel()
+    subscriptionTask?.cancel()
     telemetryTask?.cancel()
     eventTask?.cancel()
     transport.stop()

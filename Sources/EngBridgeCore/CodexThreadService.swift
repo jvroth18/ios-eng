@@ -18,6 +18,7 @@ public actor CodexThreadService {
 
   private let connection: any AppServerClient
   private let externalController: any ExternalThreadControlling
+  private let externalObserver: any ExternalThreadObserving
   private let resolver: GitRepositoryResolver
   private let bridgeName: String
   private var rawThreads: [String: RawThread] = [:]
@@ -33,11 +34,13 @@ public actor CodexThreadService {
     connection: any AppServerClient,
     resolver: GitRepositoryResolver = GitRepositoryResolver(),
     externalController: any ExternalThreadControlling = CodexCLIExternalThreadController(),
+    externalObserver: any ExternalThreadObserving = CodexSessionJournalReader(),
     bridgeName: String = Host.current().localizedName ?? "Mac"
   ) {
     self.connection = connection
     self.resolver = resolver
     self.externalController = externalController
+    self.externalObserver = externalObserver
     self.bridgeName = bridgeName
   }
 
@@ -148,22 +151,31 @@ public actor CodexThreadService {
     )
     let newestFirst = response["data"]?.arrayValue ?? []
     let mapped = CodexTimelineMapper.mapTurns(Array(newestFirst.reversed()), threadID: threadID)
-    if let activeTurnID = mapped.activeTurnID {
+    var timeline = mapped.items
+    var effectiveActiveTurnID = mapped.activeTurnID
+    if externallyOwnedThreadIDs.contains(threadID) {
+      let observation = await externalObserver.observation(threadID: threadID)
+      timeline = Self.mergeTimeline(mapped.items, with: observation.timeline)
+      if observation.activeTurnID != nil {
+        effectiveActiveTurnID = observation.activeTurnID
+      }
+    }
+    if let activeTurnID = effectiveActiveTurnID {
       activeTurnIDs[threadID] = activeTurnID
     } else {
       activeTurnIDs.removeValue(forKey: threadID)
     }
     summary = Self.copy(
       summary,
-      status: mapped.activeTurnID == nil ? .idle : .active,
+      status: effectiveActiveTurnID == nil ? .idle : .active,
       controlLevel: controlLevel(for: threadID),
-      activeTurnID: mapped.activeTurnID
+      activeTurnID: effectiveActiveTurnID
     )
     summaries[threadID] = summary
 
     return ThreadDetail(
       thread: summary,
-      timeline: PhoneTimelineWindow.project(mapped.items),
+      timeline: PhoneTimelineWindow.project(timeline),
       pendingActions: pendingRequests.values
         .map(\.action)
         .filter { $0.threadID == threadID }
@@ -492,5 +504,23 @@ public actor CodexThreadService {
       needsAttention: value.needsAttention,
       updatedAt: value.updatedAt
     )
+  }
+
+  static func mergeTimeline(
+    _ history: [TimelineItem],
+    with observed: [TimelineItem]
+  ) -> [TimelineItem] {
+    var merged = history
+    for item in observed {
+      if let index = merged.firstIndex(where: { $0.id == item.id }) {
+        merged[index] = item
+      } else {
+        merged.append(item)
+      }
+    }
+    return merged.enumerated().sorted { lhs, rhs in
+      if lhs.element.timestamp == rhs.element.timestamp { return lhs.offset < rhs.offset }
+      return lhs.element.timestamp < rhs.element.timestamp
+    }.map(\.element)
   }
 }

@@ -37,6 +37,19 @@ struct LiveThreadServiceTests {
   @Test func activeWriterStillOpensAsAReadableMacLiveThread() async throws {
     let client = MockAppServerClient()
     let external = MockExternalThreadController()
+    let observedCommand = TimelineItem(
+      id: "command-live",
+      threadID: "thread-1",
+      turnID: "turn-journal",
+      kind: .command,
+      state: .completed,
+      title: "swift test",
+      body: "47 tests passed",
+      timestamp: Date(timeIntervalSince1970: 1_700_000_001)
+    )
+    let observer = MockExternalThreadObserver(
+      value: ExternalThreadObservation(
+        timeline: [observedCommand], activeTurnID: "turn-journal", turnStateKnown: true))
     await client.enqueue(method: "thread/loaded/list", response: ["data": []])
     await client.enqueue(
       method: "thread/list",
@@ -50,14 +63,17 @@ struct LiveThreadServiceTests {
       ))
     await client.enqueue(method: "thread/turns/list", response: ["data": [Self.activeTurn]])
     let service = CodexThreadService(
-      connection: client, externalController: external, bridgeName: "Test Mac")
+      connection: client,
+      externalController: external,
+      externalObserver: observer,
+      bridgeName: "Test Mac")
 
     _ = try await service.refreshWorkspace()
     let detail = try await service.subscribe(threadID: "thread-1")
 
     #expect(detail.thread.controlLevel == .observe)
-    #expect(detail.thread.activeTurnID == "turn-1")
-    #expect(!detail.timeline.isEmpty)
+    #expect(detail.thread.activeTurnID == "turn-journal")
+    #expect(detail.timeline.contains(where: { $0.id == "command-live" }))
     #expect(!(await service.isSubscribed(threadID: "thread-1")))
   }
 
@@ -299,4 +315,10 @@ private actor MockExternalThreadController: ExternalThreadControlling {
   func interrupt(threadID: String) {
     interruptedThreads.append(threadID)
   }
+}
+
+private struct MockExternalThreadObserver: ExternalThreadObserving {
+  let value: ExternalThreadObservation
+
+  func observation(threadID: String) async -> ExternalThreadObservation { value }
 }
