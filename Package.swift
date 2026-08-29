@@ -11,10 +11,12 @@ let package = Package(
   products: [
     .library(name: "EngCore", targets: ["EngCore"]),
     .library(name: "EngBridgeCore", targets: ["EngBridgeCore"]),
+    .library(name: "EngRelayCore", targets: ["EngRelayCore"]),
     .executable(name: "eng-bridge", targets: ["EngBridge"]),
   ],
   targets: [
     .target(name: "EngCore"),
+    .target(name: "EngRelayCore", dependencies: ["EngCore"]),
     .target(name: "EngBridgeCore", dependencies: ["EngCore"]),
     .executableTarget(name: "EngBridge", dependencies: ["EngBridgeCore", "EngCore"]),
     .testTarget(name: "EngCoreTests", dependencies: ["EngCore"]),
@@ -22,5 +24,6 @@ let package = Package(
       name: "EngBridgeCoreTests",
       dependencies: ["EngBridgeCore", "EngCore"]
     ),
+    .testTarget(name: "EngRelayCoreTests", dependencies: ["EngRelayCore", "EngCore"]),
   ]
 )
