@@ -121,9 +121,18 @@ final class BridgeStore: ObservableObject {
       preferences.dictionary(forKey: PreferenceKey.observedThreadUpdates) as? [String: Double]
       ?? [:]
     focusPinnedOnly = preferences.bool(forKey: PreferenceKey.focusPinnedOnly)
-    connectionPreference =
+    let storedConnectionPreference =
       preferences.string(forKey: PreferenceKey.connectionPreference)
       .flatMap(ConnectionPreference.init(rawValue:)) ?? .automatic
+    if let index = arguments.firstIndex(of: "-eng-connection-preference"),
+      arguments.indices.contains(index + 1),
+      let override = ConnectionPreference(rawValue: arguments[index + 1])
+    {
+      connectionPreference = override
+      preferences.set(override.rawValue, forKey: PreferenceKey.connectionPreference)
+    } else {
+      connectionPreference = storedConnectionPreference
+    }
     remoteURL = preferences.string(forKey: PreferenceKey.remoteURL) ?? ""
     remoteChannelID = preferences.string(forKey: PreferenceKey.remoteChannelID) ?? ""
     demoMode = arguments.contains("-eng-demo")

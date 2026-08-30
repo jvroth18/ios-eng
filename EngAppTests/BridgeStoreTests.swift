@@ -83,6 +83,21 @@ struct BridgeStoreTests {
     #expect(secondClient.appliedPreferences.last == .preferWiFi)
   }
 
+  @Test func deploymentArgumentOverridesAndPersistsConnectionPreference() {
+    let defaults = Self.isolatedPreferences()
+    let client = FakeBridgeClient()
+    let store = BridgeStore(
+      client: client,
+      arguments: ["Eng", "-eng-connection-preference", ConnectionPreference.remoteOnly.rawValue],
+      preferences: defaults)
+
+    #expect(store.connectionPreference == .remoteOnly)
+    #expect(client.appliedPreferences.last == .remoteOnly)
+    #expect(
+      defaults.string(forKey: "eng.connection-preference")
+        == ConnectionPreference.remoteOnly.rawValue)
+  }
+
   @Test func remoteConfigurationUsesValidatedFieldsAndCanBeRemoved() throws {
     let defaults = Self.isolatedPreferences()
     let client = FakeBridgeClient()
