@@ -28,7 +28,7 @@ const files = [
 ];
 for (const [name, token] of files) {
   const path = resolve(output, name);
-  await writeFile(path, `${JSON.stringify({ channelID: result.channelID, token }, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(path, `${JSON.stringify({ relayURL: baseURL.origin, channelID: result.channelID, token }, null, 2)}\n`, { mode: 0o600 });
   await chmod(path, 0o600);
 }
 console.log(`Provisioned channel ${result.channelID}`);

@@ -150,6 +150,15 @@ final class BridgeStore: ObservableObject {
       remoteConfigured = true
       self.client.configureRemote(configuration)
     }
+    if let provisioningURL = Self.provisioningURL(from: arguments) {
+      do {
+        try loadRemoteProvisioning(from: provisioningURL)
+        try FileManager.default.removeItem(at: provisioningURL)
+      } catch {
+        presentedError = BridgeError(
+          code: "remote_provisioning", message: error.localizedDescription, recoverable: true)
+      }
+    }
     if demoMode { applyDemoState() }
   }
 
@@ -243,23 +252,28 @@ final class BridgeStore: ObservableObject {
   func saveRemoteConnection() {
     do {
       guard let url = URL(string: remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)),
-        let channelID = UUID(uuidString: remoteChannelID.trimmingCharacters(in: .whitespacesAndNewlines)),
+        let channelID = UUID(
+          uuidString: remoteChannelID.trimmingCharacters(in: .whitespacesAndNewlines)),
         let token = Data(base64Encoded: remoteToken.trimmingCharacters(in: .whitespacesAndNewlines))
           ?? remoteSecrets.load()
       else { throw RemoteRelayError.invalidResponse }
       let credential = try RelayChannelCredential(channelID: channelID, token: token)
       let configuration = try RemoteRelayConfiguration(baseURL: url, credential: credential)
-      try remoteSecrets.save(token)
-      preferences.set(configuration.baseURL.absoluteString, forKey: PreferenceKey.remoteURL)
-      preferences.set(channelID.uuidString, forKey: PreferenceKey.remoteChannelID)
-      remoteURL = configuration.baseURL.absoluteString
-      remoteChannelID = channelID.uuidString
-      remoteToken = ""
-      remoteConfigured = true
-      client.configureRemote(configuration)
+      try applyRemoteConfiguration(configuration)
     } catch {
       presentedError = BridgeError(
         code: "remote_configuration", message: error.localizedDescription, recoverable: true)
+    }
+  }
+
+  func importRemoteConnection(from url: URL) {
+    let scoped = url.startAccessingSecurityScopedResource()
+    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    do {
+      try loadRemoteProvisioning(from: url)
+    } catch {
+      presentedError = BridgeError(
+        code: "remote_provisioning", message: error.localizedDescription, recoverable: true)
     }
   }
 
@@ -876,6 +890,33 @@ final class BridgeStore: ObservableObject {
     static let threadDrafts = "eng.thread-drafts"
     static let remoteURL = "eng.remote-url"
     static let remoteChannelID = "eng.remote-channel-id"
+  }
+
+  private func loadRemoteProvisioning(from url: URL) throws {
+    let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+    let document = try JSONDecoder().decode(RelayProvisioningDocument.self, from: data)
+    try applyRemoteConfiguration(document.configuration())
+  }
+
+  private func applyRemoteConfiguration(_ configuration: RemoteRelayConfiguration) throws {
+    try remoteSecrets.save(configuration.credential.token)
+    preferences.set(configuration.baseURL.absoluteString, forKey: PreferenceKey.remoteURL)
+    preferences.set(
+      configuration.credential.channelID.uuidString, forKey: PreferenceKey.remoteChannelID)
+    remoteURL = configuration.baseURL.absoluteString
+    remoteChannelID = configuration.credential.channelID.uuidString
+    remoteToken = ""
+    remoteConfigured = true
+    client.configureRemote(configuration)
+  }
+
+  private static func provisioningURL(from arguments: [String]) -> URL? {
+    guard let index = arguments.firstIndex(of: "-eng-relay-provision"),
+      arguments.indices.contains(index + 1)
+    else { return nil }
+    let path = arguments[index + 1]
+    if path.hasPrefix("/") { return URL(fileURLWithPath: path) }
+    return URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true).appending(path: path)
   }
 
   private static func loadRemoteConfiguration(

@@ -56,9 +56,10 @@ ENG_RELAY_ADMIN_TOKEN='your-admin-token' \
 ```
 
 The command writes mode-0600 `phone-channel.json` and `bridge-channel.json` files and
-does not print either token. Transfer the phone values through a trusted local path,
-then enter the Worker URL, channel UUID, and phone token in Eng Config. Point
-`ENG_RELAY_CREDENTIALS` at the bridge file when starting `eng-bridge`.
+does not print either token. Transfer the phone file through a trusted local path and
+choose **Import file** in Eng Config; its token moves into iPhone Keychain. The Mac
+bridge automatically loads `~/Library/Application Support/EngRelay/production/bridge-channel.json`,
+or accepts another path through `ENG_RELAY_CREDENTIALS`.
 
 ## Revoke a channel
 

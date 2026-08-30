@@ -11,10 +11,23 @@ struct BridgeProtocolTests {
       try RemoteRelayConfiguration(
         baseURL: URL(string: "http://relay.example.com")!, credential: credential)
     }
-    #expect(try RemoteRelayConfiguration(
-      baseURL: URL(string: "https://relay.example.com")!, credential: credential).baseURL.scheme == "https")
-    #expect(try RemoteRelayConfiguration(
-      baseURL: URL(string: "http://127.0.0.1:8787")!, credential: credential).baseURL.host == "127.0.0.1")
+    #expect(
+      try RemoteRelayConfiguration(
+        baseURL: URL(string: "https://relay.example.com")!, credential: credential
+      ).baseURL.scheme == "https")
+    #expect(
+      try RemoteRelayConfiguration(
+        baseURL: URL(string: "http://127.0.0.1:8787")!, credential: credential
+      ).baseURL.host == "127.0.0.1")
+  }
+
+  @Test func relayProvisioningDocumentRoundTripsAndValidates() throws {
+    let configuration = try RemoteRelayConfiguration(
+      baseURL: URL(string: "https://relay.example.com")!,
+      credential: RelayChannelCredential.generate())
+    let encoded = try JSONEncoder().encode(RelayProvisioningDocument(configuration: configuration))
+    let decoded = try JSONDecoder().decode(RelayProvisioningDocument.self, from: encoded)
+    #expect(try decoded.configuration() == configuration)
   }
   @Test func newlineFramesHandleFragmentedAndCoalescedPackets() throws {
     var frames = NewlineFrameBuffer()

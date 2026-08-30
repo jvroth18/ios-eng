@@ -113,8 +113,8 @@ required.
 
 See [Cloudflare Relay](CloudflareRelay/README.md) for a reproducible deployment,
 channel provisioning, credential transfer, revocation, and threat model. After
-provisioning, enter the Worker URL, channel UUID, and phone token in Config. Start the
-Mac bridge with the separate bridge credential:
+provisioning, import `phone-channel.json` from Config. Start the Mac bridge with the
+separate bridge provisioning file:
 
 ```sh
 ENG_RELAY_URL=https://eng-relay.example.workers.dev \

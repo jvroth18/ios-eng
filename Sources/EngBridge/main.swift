@@ -138,10 +138,18 @@ enum EngBridgeMain {
 
   private static func remoteRelayConfiguration() throws -> RemoteRelayConfiguration? {
     let environment = ProcessInfo.processInfo.environment
-    guard let value = environment["ENG_RELAY_URL"], let url = URL(string: value),
-      let file = environment["ENG_RELAY_CREDENTIALS"]
-    else { return nil }
+    let defaultFile = FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library/Application Support/EngRelay/production/bridge-channel.json")
+      .path
+    let file = environment["ENG_RELAY_CREDENTIALS"] ?? defaultFile
+    guard FileManager.default.fileExists(atPath: file) else { return nil }
     let data = try Data(contentsOf: URL(fileURLWithPath: file))
+    if let document = try? JSONDecoder().decode(RelayProvisioningDocument.self, from: data) {
+      return try document.configuration()
+    }
+    guard let value = environment["ENG_RELAY_URL"], let url = URL(string: value) else {
+      throw RemoteRelayError.invalidResponse
+    }
     let credential = try JSONDecoder().decode(RelayChannelCredential.self, from: data)
     return try RemoteRelayConfiguration(baseURL: url, credential: credential)
   }

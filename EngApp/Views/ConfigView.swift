@@ -1,7 +1,9 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ConfigView: View {
   @EnvironmentObject private var store: BridgeStore
+  @State private var isImportingRemote = false
 
   var body: some View {
     ScrollView {
@@ -16,6 +18,9 @@ struct ConfigView: View {
     }
     .scrollIndicators(.hidden)
     .background(Win95.face)
+    .fileImporter(isPresented: $isImportingRemote, allowedContentTypes: [.json]) { result in
+      if case .success(let url) = result { store.importRemoteConnection(from: url) }
+    }
   }
 
   private var remoteGroup: some View {
@@ -36,15 +41,22 @@ struct ConfigView: View {
           .autocorrectionDisabled()
           .font(Win95Font.monoSmall)
           .win95Field()
-        SecureField(store.remoteConfigured ? "Channel token saved in Keychain" : "Base64 channel token", text: $store.remoteToken)
-          .textInputAutocapitalization(.never)
-          .autocorrectionDisabled()
-          .font(Win95Font.monoSmall)
-          .win95Field()
-        Text("The token stays in this iPhone's Keychain. Codex data remains encrypted between this phone and your Mac; the relay only routes ciphertext.")
-          .font(Win95Font.small)
-          .fixedSize(horizontal: false, vertical: true)
+        SecureField(
+          store.remoteConfigured ? "Channel token saved in Keychain" : "Base64 channel token",
+          text: $store.remoteToken
+        )
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .font(Win95Font.monoSmall)
+        .win95Field()
+        Text(
+          "The token stays in this iPhone's Keychain. Codex data remains encrypted between this phone and your Mac; the relay only routes ciphertext."
+        )
+        .font(Win95Font.small)
+        .fixedSize(horizontal: false, vertical: true)
         HStack {
+          Button("Import file") { isImportingRemote = true }
+            .buttonStyle(Win95ButtonStyle())
           Button(store.remoteConfigured ? "Update" : "Save") { store.saveRemoteConnection() }
             .buttonStyle(Win95ButtonStyle(isDefault: true))
           if store.remoteConfigured {

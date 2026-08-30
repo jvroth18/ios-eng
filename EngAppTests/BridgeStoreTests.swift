@@ -104,6 +104,30 @@ struct BridgeStoreTests {
     #expect(client.appliedRemoteConfigurations.last! == nil)
   }
 
+  @Test func remoteProvisioningFileImportsIntoKeychainAndTransport() throws {
+    let defaults = Self.isolatedPreferences()
+    let client = FakeBridgeClient()
+    let secrets = FakeRemoteRelaySecretStore()
+    let store = BridgeStore(
+      client: client, arguments: [], preferences: defaults, remoteSecrets: secrets)
+    let expected = try RemoteRelayConfiguration(
+      baseURL: URL(string: "https://relay.example.com")!,
+      credential: RelayChannelCredential.generate())
+    let directory = FileManager.default.temporaryDirectory
+      .appending(path: "EngProvisioning-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appending(path: "phone-channel.json")
+    try JSONEncoder().encode(RelayProvisioningDocument(configuration: expected)).write(to: file)
+
+    store.importRemoteConnection(from: file)
+
+    #expect(store.remoteConfigured)
+    #expect(store.remoteToken.isEmpty)
+    #expect(secrets.load() == expected.credential.token)
+    #expect(client.appliedRemoteConfigurations.last! == expected)
+  }
+
   @Test func folderPinsAndPinnedOnlyFocusPersist() {
     let defaults = Self.isolatedPreferences()
     let first = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
