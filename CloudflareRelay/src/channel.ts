@@ -3,6 +3,7 @@ import {
   MAX_FRAME_BYTES,
   bearer,
   digest,
+  constantTimeEqual,
   isPeerRole,
   json,
   opposite,
@@ -20,6 +21,11 @@ export class ChannelRelay extends DurableObject<Env> {
     const url = new URL(request.url);
     if (request.method === "POST" && url.pathname === "/internal/configure") {
       return this.configure(request);
+    }
+    if (request.method === "DELETE" && url.pathname === "/internal/revoke") {
+      for (const socket of this.ctx.getWebSockets()) socket.close(4003, "Channel revoked");
+      await this.ctx.storage.deleteAll();
+      return json({ revoked: true });
     }
     if (request.method !== "GET" || url.pathname !== "/connect") {
       return json({ error: "not_found" }, 404);
@@ -91,7 +97,9 @@ export class ChannelRelay extends DurableObject<Env> {
     const expected = roleValue === "phone"
       ? configuration.phoneTokenDigest
       : configuration.bridgeTokenDigest;
-    if ((await digest(token)) !== expected) return json({ error: "unauthorized" }, 401);
+    if (!constantTimeEqual(await digest(token), expected)) {
+      return json({ error: "unauthorized" }, 401);
+    }
 
     for (const existing of this.ctx.getWebSockets(roleValue)) {
       existing.close(4001, "Replaced by a newer connection");

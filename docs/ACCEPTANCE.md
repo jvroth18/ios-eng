@@ -19,6 +19,7 @@ This file keeps the original goal testable instead of allowing the implementatio
 | Bluetooth and Wi-Fi nearby operation | Apple Nearby Auto transport with required encryption, explicit supported-bearer copy, and no unsupported claim about the selected radio |
 | USB-C local operation | Public Network Framework path over Apple’s `iPhone USB` Personal Hotspot interface, wired-interface preference and honest bearer label, with no private USB or developer forwarding API |
 | Fast secure remote path | Transport-neutral protocol, authenticated direct-local implementation, and host-key-verified SSH tunnel without exposing App Server or Codex credentials |
+| Hosted open-source remote path | Apache-2.0 Cloudflare Worker, one Durable Object per random channel, distinct role credentials, opaque bounded WebSocket routing, revocation, runtime tests, and reproducible deployment workflow |
 | Honest temperature behavior | Public thermal-state categories; no degree value or private API in source |
 | Incremental implementation | Separate validated commits pushed after contract, bridge, app, and final end-to-end phases |
 

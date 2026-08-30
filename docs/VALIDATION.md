@@ -2,6 +2,17 @@
 
 Validated on August 28, 2026 with Xcode 26.5, Swift 6, Codex CLI, an iPhone 17 Pro simulator, and Jordan's paired iPhone 17 Pro.
 
+## August 30 Cloudflare hosted relay
+
+- The Apache-2.0 Worker uses one Durable Object per random channel and stores only
+  SHA-256 digests of separate 256-bit phone and bridge credentials.
+- Cloudflare runtime tests cover administrator authentication, cross-role and
+  cross-channel rejection, binary ciphertext routing, and isolated revocation.
+- Type checking, dependency audit, runtime tests, and Wrangler dry-run deployment
+  are reproducible locally and in GitHub Actions.
+- The Swift phone and bridge transports use reconnecting outbound WebSockets while
+  preserving Eng's existing Curve25519 pairing, identity pinning, and AES-GCM frames.
+
 The expanded conversation now reserves animation for the single current-activity
 LED. The toolbar status and running-item LEDs remain steadily lit, preventing three
 independent blink loops from competing while a thread is working. This repair is

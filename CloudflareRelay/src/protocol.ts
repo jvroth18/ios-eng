@@ -50,6 +50,15 @@ export async function digest(token: string): Promise<string> {
   return base64URL(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
 }
 
+export function constantTimeEqual(left: string, right: string): boolean {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
 export function randomToken(): string {
   return base64(crypto.getRandomValues(new Uint8Array(32)));
 }

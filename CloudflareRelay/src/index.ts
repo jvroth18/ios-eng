@@ -1,6 +1,7 @@
 import { ChannelRelay } from "./channel";
 import {
   bearer,
+  constantTimeEqual,
   digest,
   isPeerRole,
   json,
@@ -25,6 +26,9 @@ export default {
     if (request.method === "POST" && url.pathname === "/v1/channels") {
       return provision(request, env);
     }
+    if (request.method === "DELETE" && url.pathname.startsWith("/v1/channels/")) {
+      return revoke(request, env, url.pathname.slice("/v1/channels/".length));
+    }
     if (request.method === "GET" && url.pathname === "/v1/connect") {
       return connect(request, env, url);
     }
@@ -33,8 +37,7 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 async function provision(request: Request, env: Env): Promise<Response> {
-  const adminToken = bearer(request);
-  if (!env.ADMIN_TOKEN || env.ADMIN_TOKEN.length < 32 || adminToken !== env.ADMIN_TOKEN) {
+  if (!(await authorizedAdmin(request, env))) {
     return json({ error: "unauthorized" }, 401);
   }
   const channelID = crypto.randomUUID();
@@ -55,6 +58,21 @@ async function provision(request: Request, env: Env): Promise<Response> {
   if (!response.ok) return json({ error: "provisioning_failed" }, 500);
   const result: ChannelProvisioning = { channelID, phoneToken, bridgeToken, createdAt };
   return json(result, 201);
+}
+
+async function revoke(request: Request, env: Env, channelID: string): Promise<Response> {
+  if (!(await authorizedAdmin(request, env))) return json({ error: "unauthorized" }, 401);
+  if (!isUUID(channelID)) return json({ error: "invalid_channel" }, 400);
+  return env.CHANNELS.get(env.CHANNELS.idFromName(channelID)).fetch(
+    "https://channel/internal/revoke",
+    { method: "DELETE" },
+  );
+}
+
+async function authorizedAdmin(request: Request, env: Env): Promise<boolean> {
+  const token = bearer(request);
+  if (!token || !env.ADMIN_TOKEN || env.ADMIN_TOKEN.length < 32) return false;
+  return constantTimeEqual(await digest(token), await digest(env.ADMIN_TOKEN));
 }
 
 async function connect(request: Request, env: Env, url: URL): Promise<Response> {

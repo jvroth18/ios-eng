@@ -1,0 +1,35 @@
+name: Cloudflare Relay
+
+on:
+  pull_request:
+    paths:
+      - "CloudflareRelay/**"
+      - ".github/workflows/cloudflare-relay.yml"
+  push:
+    branches: [main]
+    paths:
+      - "CloudflareRelay/**"
+      - ".github/workflows/cloudflare-relay.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: CloudflareRelay
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: CloudflareRelay/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run check
+      - run: npm test
+      - run: npx wrangler deploy --dry-run

@@ -36,6 +36,21 @@ describe("Eng Cloudflare relay", () => {
     expect((await connect(first.channelID, "phone", "invalid")).status).toBe(401);
   });
 
+  it("revokes one channel without affecting another channel", async () => {
+    const revoked = await provision();
+    const retained = await provision();
+    const response = await SELF.fetch(`https://eng.test/v1/channels/${revoked.channelID}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(response.status).toBe(200);
+    expect((await connect(revoked.channelID, "phone", revoked.phoneToken)).status).toBe(401);
+    const retainedResponse = await connect(retained.channelID, "phone", retained.phoneToken);
+    expect(retainedResponse.status).toBe(101);
+    retainedResponse.webSocket!.accept();
+    retainedResponse.webSocket!.close(1000, "test complete");
+  });
+
   it("routes binary ciphertext between paired roles without echoing it", async () => {
     const channel = await provision();
     const bridgeResponse = await connect(channel.channelID, "bridge", channel.bridgeToken);

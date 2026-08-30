@@ -60,18 +60,19 @@ The fallback `Nearby Auto` transport uses `MCSession` with required encryption. 
 Protocol v5 carries transport identity, direct-session key material, the account-aware model catalog, and existing-thread model updates. Network Framework discovers the Mac through Bonjour on every eligible local interface. The phone prefers a discovered wired-Ethernet interface—which is how Apple exposes USB Personal Hotspot—then Wi-Fi or another local path. A Curve25519 agreement protects the initial pair exchange; the phone and Mac persistently pin each other's public identities, and accepted sessions rotate to a short-lived random 256-bit AES-GCM credential. Nearby remains the fallback.
 
 Remote Relay is a third implementation of the same transport boundary. The iPhone
-and Mac independently poll and post bounded frames to a channel-specific HTTPS
-endpoint. Automatic mode still prioritizes direct local connectivity. The relay
-authenticates the channel token, caps each peer queue, expires idle channels, and
-routes frames only to the opposite role. It never receives a transport bootstrap or
-decryption key: the existing Curve25519 exchange is forwarded as public pairing
-material, and all subsequent `BridgeEnvelope` values remain AES-GCM ciphertext.
+and Mac open reconnecting WebSockets to a Cloudflare Worker. Each provisioned channel
+maps to one Durable Object, and phone and bridge roles receive different random
+credentials whose SHA-256 digests are stored in that object. A phone credential
+cannot open the bridge role or address another channel. Automatic mode still
+prioritizes direct local connectivity.
 
-The relay service binds loopback by default and is designed for HTTPS termination by
-a narrowly configured reverse proxy. Non-loopback HTTP URLs are rejected by both
-clients. The relay channel token is stored in a mode-0600 file on the server/Mac and
-with after-first-unlock, this-device-only protection in iPhone Keychain. Neither the
-relay nor its reverse proxy forwards the Codex App Server port.
+The Durable Object uses the WebSocket Hibernation API and routes only bounded binary
+frames to the opposite connected role. It never receives a transport bootstrap or
+decryption key: the existing Curve25519 exchange is forwarded as public pairing
+material, and all subsequent `BridgeEnvelope` values remain AES-GCM ciphertext. The
+phone credential uses after-first-unlock, this-device-only Keychain protection; the
+bridge credential file uses mode 0600. Revocation deletes the Durable Object channel
+configuration and closes its sockets. Codex App Server is never forwarded.
 
 A USB-C cable alone is only a trusted device/developer connection and is not a public application data channel. USB-C transport therefore requires Personal Hotspot to expose `iPhone USB` as a network interface. Eng does not use `usbmuxd`, developer port forwarding, private frameworks, or MFi accessory protocols.
 

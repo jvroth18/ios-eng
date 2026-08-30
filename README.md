@@ -1,12 +1,13 @@
 # Eng
 
-Eng is a private, native iPhone companion for Codex work running on your Mac. It groups threads by the repository they are working in, mirrors conversation and tool activity, lets you send or steer work from the phone, surfaces approvals when the Mac session supports them, and shows live phone/Mac diagnostics.
+Eng is an open-source, native iPhone companion for Codex work running on your Mac. It groups threads by the repository they are working in, mirrors conversation and tool activity, lets you send or steer work from the phone, surfaces approvals when the Mac session supports them, and shows live phone/Mac diagnostics.
 
-The repository contains four pieces:
+The repository contains five pieces:
 
 - `EngCore`: the versioned, tested wire protocol and shared models.
 - `EngBridge`: a Mac companion that connects to Codex App Server and advertises encrypted nearby and direct-local sessions.
 - `EngRelay`: a self-hosted, loopback-by-default opaque frame relay for remote access.
+- `CloudflareRelay`: a hosted, channel-isolated Worker and Durable Object transport.
 - `Eng`: a deliberately small SwiftUI iPhone app with Projects, Thread, Analytics, and Config surfaces, drawn in a classic Windows 9x "analog" style (beveled windows, tab pages, LEDs, and a green-phosphor system monitor) from the `EngApp/Design/Win95.swift` kit.
 
 ## Product boundary
@@ -102,34 +103,27 @@ preferences keep Nearby available as a recovery path. iOS does not expose an
 app API that keeps USB-C data active while disabling charging, so Eng controls
 only its data route and never presents a charging switch it cannot enforce.
 
-## Self-hosted remote access
+## Open-source Cloudflare remote access
 
-Remote access does not require another iPhone app. Create a private channel on the
-relay host, keep the generated file secret, and run the relay behind an HTTPS reverse
-proxy:
+`CloudflareRelay` is an Apache-2.0 self-hostable Worker using Durable Objects and
+hibernating WebSockets. It creates an isolated object and different 256-bit phone and
+bridge credentials for every channel. Cloudflare routes only the existing bounded,
+end-to-end encrypted Eng frames. No additional iPhone app or home-router port is
+required.
 
-```sh
-swift run eng-relay issue --output /secure/path/eng-channel.json
-swift run eng-relay serve --credentials /secure/path/eng-channel.json --port 8787
-```
-
-The listener binds `127.0.0.1` unless `--public-bind` is explicitly supplied. Keep
-it on loopback and forward only HTTPS requests from the reverse proxy. Copy the HTTPS
-URL, channel UUID, and Base64 token from the credential file into Eng's Config tab.
-The token is stored in iPhone Keychain.
-
-Start the Mac bridge with the same channel and public HTTPS URL:
+See [Cloudflare Relay](CloudflareRelay/README.md) for a reproducible deployment,
+channel provisioning, credential transfer, revocation, and threat model. After
+provisioning, enter the Worker URL, channel UUID, and phone token in Config. Start the
+Mac bridge with the separate bridge credential:
 
 ```sh
-ENG_RELAY_URL=https://eng-relay.example.com \
-ENG_RELAY_CREDENTIALS=/secure/path/eng-channel.json \
+ENG_RELAY_URL=https://eng-relay.example.workers.dev \
+ENG_RELAY_CREDENTIALS=/secure/path/bridge-channel.json \
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift run eng-bridge
 ```
 
-Both devices make outbound HTTPS requests, so no inbound home-router port is needed.
-Local USB-C/Wi-Fi remains preferred in Automatic mode. The relay receives only public
-pairing material and bounded AES-GCM ciphertext; Codex App Server remains on Mac
-loopback. Revoke access by issuing a new channel and replacing both configurations.
+Both devices make outbound WebSocket connections. Local USB-C/Wi-Fi remains preferred
+in Automatic mode, and Codex App Server remains on Mac loopback.
 
 The running bridge publishes its owned loopback port and process identifier to
 `~/Library/Application Support/EngBridge/runtime.json`. `Scripts/codex-eng`
@@ -138,4 +132,4 @@ and still honors an explicit `IOS_ENG_CODEX_PORT` override.
 
 ## Privacy
 
-Eng is local-first. It does not contain an OpenAI API key, copy Codex authentication to the phone, or expose Codex App Server. Its Bonjour TCP listener and optional remote relay path perform Curve25519 key agreement, pin both device identities, and accept only authenticated AES-GCM frames. Remote channel tokens stay in the relay's protected credential file and iPhone Keychain. Diagnostic history is short-lived and remains on the two devices.
+Eng is local-first. It does not contain an OpenAI API key, copy Codex authentication to the phone, or expose Codex App Server. Its Bonjour TCP listener and optional remote relay path perform Curve25519 key agreement, pin both device identities, and accept only authenticated AES-GCM frames. The phone and bridge receive different remote credentials, stored in their respective Keychains/protected files. Diagnostic history is short-lived and remains on the two devices.
