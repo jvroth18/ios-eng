@@ -164,4 +164,15 @@ the Mac thread.
 
 ## Operational boundary
 
-The Codex WebSocket remains bound to `127.0.0.1`. The phone never receives Codex credentials and connects through an encrypted Multipeer Connectivity session gated by a short-lived six-digit code. Diagnostic history is held in memory and capped at 90 samples per device.
+The Codex WebSocket remains bound to `127.0.0.1`. The phone never receives Codex credentials. Local sessions use the existing encrypted direct/Nearby transports; remote sessions route only bounded, end-to-end encrypted frames through the role-isolated Cloudflare relay. Diagnostic history is held in memory and capped at 90 samples per device.
+
+## August 30 open-source Cloudflare deployment
+
+- The GitHub repository is public under Apache-2.0 and includes contribution, security, CI, full-history secret scanning, and manual Cloudflare deployment workflows.
+- The production Worker is healthy at `eng-relay.jordan-b64.workers.dev`. Channel administration rejects unauthenticated calls, phone and bridge credentials cannot be exchanged, and the revoked bootstrap channel remains unusable.
+- Each channel uses a dedicated Durable Object, distinct 256-bit role credentials, digest-only credential storage, constant-time verification, revocation, WebSocket hibernation, a 2 MiB binary-frame ceiling, and no application-payload logging.
+- A native Foundation WebSocket probe authenticated with the phone role and received the relay control frame. The Swift client then held its TLS connection beyond the previously reproducible 60-second idle failure using WebSocket ping keepalives.
+- Core coverage passes 57 tests in 17 suites. Cloudflare coverage passes 6 tests, including role isolation, revocation, frame limits, and canonical UUID routing. The iPhone simulator passes 37 tests in 5 suites.
+- Eng 0.8.0 (build 13) was signed, installed, and launched on the paired physical iPhone. In `Remote only`, it paired through Cloudflare with end-to-end encryption, sent live CPU/thermal/interface diagnostics, and completed a link measurement. In `Automatic`, it authenticated the remote fallback and selected the faster encrypted direct-local route when the Mac was nearby.
+- The one-time phone provisioning document was mode `0600` before transfer and was deleted from the iPhone Documents container immediately after import. The long-lived phone role credential is stored in Keychain; neither role credential nor the administration token is committed to Git.
+- Amphetamine Switch 4.2 (build 15) contains the exact tested release bridge SHA-256 `65aef8b5a1b51f01a907b1afbec0ca6de51567fd56a6ab765d6eba5b28c73f58`. Its owned bridge reports healthy on loopback, maintains an established TLS relay socket, and accepts the iPhone's encrypted direct-local session.
