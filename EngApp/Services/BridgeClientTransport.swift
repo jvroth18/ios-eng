@@ -19,6 +19,7 @@ enum ConnectionPreference: String, CaseIterable, Identifiable, Sendable {
   case preferUSBC
   case preferWiFi
   case nearbyOnly
+  case remoteOnly
 
   var id: String { rawValue }
 
@@ -28,6 +29,7 @@ enum ConnectionPreference: String, CaseIterable, Identifiable, Sendable {
     case .preferUSBC: "USB-C first"
     case .preferWiFi: "Wi-Fi first"
     case .nearbyOnly: "Nearby only"
+    case .remoteOnly: "Remote only"
     }
   }
 
@@ -37,6 +39,7 @@ enum ConnectionPreference: String, CaseIterable, Identifiable, Sendable {
     case .preferUSBC: "Use the wired USB-C route when present; Nearby remains available."
     case .preferWiFi: "Use direct Wi-Fi when present; Nearby remains available."
     case .nearbyOnly: "Disable direct local discovery and use the encrypted Nearby session."
+    case .remoteOnly: "Use your private remote relay, including over cellular."
     }
   }
 }
@@ -51,9 +54,11 @@ protocol BridgeClientTransport: AnyObject, Sendable {
   func send(_ envelope: BridgeEnvelope) throws
   func install(_ bootstrap: TransportBootstrap)
   func setConnectionPreference(_ preference: ConnectionPreference)
+  func configureRemote(_ configuration: RemoteRelayConfiguration?)
 }
 
 extension BridgeClientTransport {
   func install(_ bootstrap: TransportBootstrap) {}
   func setConnectionPreference(_ preference: ConnectionPreference) {}
+  func configureRemote(_ configuration: RemoteRelayConfiguration?) {}
 }

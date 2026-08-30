@@ -4,6 +4,7 @@ import Foundation
 final class AdaptiveBridgeClient: @unchecked Sendable {
   private let nearby: NearbyClient
   private let wifi: WiFiClient
+  private let remote: RemoteRelayClient
   private let lock = NSLock()
   private var eventHandler: (@Sendable (BridgeClientEvent) -> Void)?
   private var preference = ConnectionPreference.automatic
@@ -12,11 +13,17 @@ final class AdaptiveBridgeClient: @unchecked Sendable {
   init(displayName: String, deviceID: UUID) {
     nearby = NearbyClient(displayName: displayName)
     wifi = WiFiClient(deviceID: deviceID, deviceName: displayName)
+    remote = RemoteRelayClient(deviceID: deviceID, deviceName: displayName)
     nearby.setEventHandler { [weak self] event in self?.relay(event, fromWiFi: false) }
     wifi.setEventHandler { [weak self] event in self?.relay(event, fromWiFi: true) }
+    remote.setEventHandler { [weak self] event in self?.relayRemote(event) }
   }
 
-  var kind: BridgeTransportKind { wifi.connected ? .wifiDirect : .nearbyAuto }
+  var kind: BridgeTransportKind {
+    if wifi.connected { return .wifiDirect }
+    if remote.connected { return .remoteRelay }
+    return .nearbyAuto
+  }
   var identityPublicKey: Data? { wifi.identityPublicKey }
 
   func setEventHandler(_ handler: @escaping @Sendable (BridgeClientEvent) -> Void) {
@@ -32,6 +39,7 @@ final class AdaptiveBridgeClient: @unchecked Sendable {
     lock.withLock { isStarted = false }
     wifi.stop()
     nearby.stop()
+    remote.stop()
   }
 
   func setConnectionPreference(_ preference: ConnectionPreference) {
@@ -45,6 +53,10 @@ final class AdaptiveBridgeClient: @unchecked Sendable {
 
   func install(_ bootstrap: TransportBootstrap) { wifi.install(bootstrap) }
 
+  func configureRemote(_ configuration: RemoteRelayConfiguration?) {
+    remote.configure(configuration)
+  }
+
   func send(_ envelope: BridgeEnvelope) throws {
     if wifi.connected {
       do {
@@ -54,7 +66,16 @@ final class AdaptiveBridgeClient: @unchecked Sendable {
         // Fall back to the encrypted nearby session.
       }
     }
+    if remote.connected {
+      do { try remote.send(envelope); return } catch {}
+    }
     try nearby.send(envelope)
+  }
+
+  private func relayRemote(_ event: BridgeClientEvent) {
+    if wifi.connected, case .state = event { return }
+    if remote.connected, case .state(.connected) = event { nearby.stop() }
+    lock.withLock { eventHandler }?(event)
   }
 
   private func relay(_ event: BridgeClientEvent, fromWiFi: Bool) {
@@ -68,12 +89,18 @@ final class AdaptiveBridgeClient: @unchecked Sendable {
   private func applyConnectionPreference() {
     let preference = lock.withLock { self.preference }
     wifi.setConnectionPreference(preference)
-    if preference == .nearbyOnly {
+    if preference == .remoteOnly {
+      wifi.stop()
+      nearby.stop()
+      remote.start()
+    } else if preference == .nearbyOnly {
       wifi.stop()
       nearby.start()
+      remote.stop()
     } else {
       wifi.start()
       nearby.start()
+      remote.start()
     }
   }
 }

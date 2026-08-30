@@ -50,14 +50,25 @@ enum EngBridgeMain {
       let trustStore = PairingTrustStore()
       let trustedDeviceIDs = trustStore.trustedDeviceIDs()
       let directPairingKey = try trustStore.directPairingPrivateKey()
-      let transport = CompositeBridgeServer([
+      var transports: [any BridgeServerTransport] = [
         NearbyServer(),
         WiFiServer(
           registry: registry,
           pairingKey: directPairingKey,
           identityValidator: { trustStore.matchesIdentity(deviceID: $0, publicKey: $1) }
         ),
-      ])
+      ]
+      if let relay = try remoteRelayConfiguration() {
+        transports.append(
+          RemoteRelayServer(
+            configuration: relay,
+            registry: registry,
+            pairingKey: directPairingKey,
+            identityValidator: { trustStore.matchesIdentity(deviceID: $0, publicKey: $1) }
+          ))
+        print("Remote relay enabled: \(relay.baseURL.host ?? relay.baseURL.absoluteString)")
+      }
+      let transport = CompositeBridgeServer(transports)
       let coordinator = BridgeCoordinator(
         transport: transport,
         service: service,
@@ -123,6 +134,16 @@ enum EngBridgeMain {
       let value = UInt16(arguments[arguments.index(after: index)])
     else { return nil }
     return value
+  }
+
+  private static func remoteRelayConfiguration() throws -> RemoteRelayConfiguration? {
+    let environment = ProcessInfo.processInfo.environment
+    guard let value = environment["ENG_RELAY_URL"], let url = URL(string: value),
+      let file = environment["ENG_RELAY_CREDENTIALS"]
+    else { return nil }
+    let data = try Data(contentsOf: URL(fileURLWithPath: file))
+    let credential = try JSONDecoder().decode(RelayChannelCredential.self, from: data)
+    return try RemoteRelayConfiguration(baseURL: url, credential: credential)
   }
 
   private static func waitForTerminationSignal() async {

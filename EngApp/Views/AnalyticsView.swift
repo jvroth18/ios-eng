@@ -163,6 +163,7 @@ struct AnalyticsView: View {
     switch store.analytics.link.transport {
     case .nearbyAuto: "dot.radiowaves.left.and.right"
     case .wifiDirect: "network"
+    case .remoteRelay: "globe.americas.fill"
     case .sshTunnel: "lock.fill"
     }
   }

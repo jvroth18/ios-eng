@@ -5,6 +5,17 @@ import Testing
 @testable import EngCore
 
 struct BridgeProtocolTests {
+  @Test func remoteRelayConfigurationRequiresHTTPSOutsideLoopback() throws {
+    let credential = try RelayChannelCredential.generate()
+    #expect(throws: RemoteRelayError.insecureURL) {
+      try RemoteRelayConfiguration(
+        baseURL: URL(string: "http://relay.example.com")!, credential: credential)
+    }
+    #expect(try RemoteRelayConfiguration(
+      baseURL: URL(string: "https://relay.example.com")!, credential: credential).baseURL.scheme == "https")
+    #expect(try RemoteRelayConfiguration(
+      baseURL: URL(string: "http://127.0.0.1:8787")!, credential: credential).baseURL.host == "127.0.0.1")
+  }
   @Test func newlineFramesHandleFragmentedAndCoalescedPackets() throws {
     var frames = NewlineFrameBuffer()
     #expect(try frames.append(Data("one".utf8)) == [])

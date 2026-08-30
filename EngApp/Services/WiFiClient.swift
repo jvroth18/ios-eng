@@ -65,7 +65,8 @@ final class WiFiClient: @unchecked Sendable {
   func start() {
     let shouldStart = lock.withLock { () -> Bool in
       wantsConnection = true
-      return connectionPreference != .nearbyOnly && self.browser == nil && connection == nil
+      return connectionPreference != .nearbyOnly && connectionPreference != .remoteOnly
+        && self.browser == nil && connection == nil
     }
     guard shouldStart else { return }
     let parameters = NWParameters.tcp
@@ -115,7 +116,7 @@ final class WiFiClient: @unchecked Sendable {
     }
     if wasStarted {
       stop()
-      if preference != .nearbyOnly { start() }
+      if preference != .nearbyOnly && preference != .remoteOnly { start() }
     }
   }
 
@@ -282,7 +283,7 @@ final class WiFiClient: @unchecked Sendable {
     in results: Set<NWBrowser.Result>,
     preference: ConnectionPreference
   ) -> (result: NWBrowser.Result, interface: NWInterface?)? {
-    guard preference != .nearbyOnly else { return nil }
+    guard preference != .nearbyOnly && preference != .remoteOnly else { return nil }
     let selections = results.flatMap { result in
       result.interfaces.map { (result: result, interface: Optional($0)) }
         + (result.interfaces.isEmpty ? [(result: result, interface: nil)] : [])
