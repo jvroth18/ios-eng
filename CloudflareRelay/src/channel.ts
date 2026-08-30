@@ -59,7 +59,8 @@ export class ChannelRelay extends DurableObject<Env> {
   ): Promise<void> {
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
     if (attachment) this.notify(opposite(attachment.role), false);
-    socket.close(code, reason);
+    void code;
+    void reason;
     void wasClean;
   }
 

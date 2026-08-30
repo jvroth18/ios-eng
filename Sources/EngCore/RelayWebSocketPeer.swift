@@ -1,4 +1,5 @@
 import Foundation
+
 #if canImport(FoundationNetworking)
   import FoundationNetworking
 #endif
@@ -6,6 +7,17 @@ import Foundation
 public enum RelayWebSocketEvent: Equatable, Sendable {
   case ready(peerConnected: Bool)
   case peerConnected(Bool)
+}
+
+private struct RelayWebSocketConnectionFailure: LocalizedError {
+  let underlying: NSError
+  let statusCode: Int?
+
+  var errorDescription: String? {
+    let status = statusCode.map { ", HTTP \($0)" } ?? ""
+    return
+      "WebSocket failed (\(underlying.domain) \(underlying.code)\(status)): \(underlying.localizedDescription)"
+  }
 }
 
 public final class RelayWebSocketPeer: @unchecked Sendable {
@@ -86,12 +98,15 @@ public final class RelayWebSocketPeer: @unchecked Sendable {
       } catch is CancellationError {
         return
       } catch {
+        let failure = RelayWebSocketConnectionFailure(
+          underlying: error as NSError,
+          statusCode: (current.response as? HTTPURLResponse)?.statusCode)
         let shouldRetry = lock.withLock { () -> Bool in
           if socket === current { socket = nil }
           return wantsConnection
         }
         if shouldRetry {
-          emitPayload(.failure(error))
+          emitPayload(.failure(failure))
           try? await Task.sleep(for: .seconds(2))
         }
       }
