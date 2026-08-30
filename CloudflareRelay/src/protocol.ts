@@ -39,13 +39,19 @@ export function base64URL(bytes: Uint8Array): string {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
 }
 
+export function base64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 export async function digest(token: string): Promise<string> {
   const bytes = new TextEncoder().encode(token);
   return base64URL(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
 }
 
 export function randomToken(): string {
-  return base64URL(crypto.getRandomValues(new Uint8Array(32)));
+  return base64(crypto.getRandomValues(new Uint8Array(32)));
 }
 
 export function json(value: unknown, status = 200): Response {

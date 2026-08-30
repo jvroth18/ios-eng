@@ -6,7 +6,7 @@ public final class RemoteRelayServer: @unchecked Sendable {
   private let registry: SecureTransportRegistry
   private let pairingKey: Curve25519.KeyAgreement.PrivateKey
   private let identityValidator: @Sendable (UUID, Data) -> Bool
-  private let peer: RelayHTTPPeer
+  private let peer: RelayWebSocketPeer
   private let lock = NSLock()
   private var connectedDeviceID: UUID?
   private var envelopeHandler: (@Sendable (String, BridgeEnvelope) -> Void)?
@@ -23,7 +23,7 @@ public final class RemoteRelayServer: @unchecked Sendable {
     self.registry = registry
     self.pairingKey = pairingKey
     self.identityValidator = identityValidator
-    peer = RelayHTTPPeer(configuration: configuration, role: .bridge)
+    peer = RelayWebSocketPeer(configuration: configuration, role: .bridge)
   }
 
   public func setHandlers(
@@ -34,12 +34,12 @@ public final class RemoteRelayServer: @unchecked Sendable {
   }
 
   public func start() {
-    peer.start { [weak self] result in
+    peer.start(payload: { [weak self] result in
       switch result {
       case .success(let data): self?.receive(data)
       case .failure: self?.disconnect()
       }
-    }
+    })
   }
 
   public func stop() { peer.stop(); disconnect() }

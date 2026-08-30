@@ -8,6 +8,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "vitest run",
+    "provision": "node scripts/provision-channel.mjs",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev"
   },

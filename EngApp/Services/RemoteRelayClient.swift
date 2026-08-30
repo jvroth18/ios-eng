@@ -7,7 +7,7 @@ final class RemoteRelayClient: @unchecked Sendable {
   private let deviceName: String
   private let pairingKey: Curve25519.KeyAgreement.PrivateKey
   private let lock = NSLock()
-  private var peer: RelayHTTPPeer?
+  private var peer: RelayWebSocketPeer?
   private var bootstrap: TransportBootstrap?
   private var eventHandler: (@Sendable (BridgeClientEvent) -> Void)?
   private var retryTask: Task<Void, Never>?
@@ -43,14 +43,19 @@ final class RemoteRelayClient: @unchecked Sendable {
     }
     guard shouldStart else { return }
     emit(.state(.connecting("Mac · Remote")))
-    let relayPeer = RelayHTTPPeer(configuration: configuration, role: .phone)
+    let relayPeer = RelayWebSocketPeer(configuration: configuration, role: .phone)
     lock.withLock { self.peer = relayPeer }
-    relayPeer.start { [weak self] result in
-      switch result {
-      case .success(let data): self?.receive(data)
-      case .failure(let error): self?.handleFailure(error)
-      }
-    }
+    relayPeer.start(
+      payload: { [weak self] result in
+        switch result {
+        case .success(let data): self?.receive(data)
+        case .failure(let error): self?.handleFailure(error)
+        }
+      },
+      control: { [weak self] event in
+        if case .peerConnected(true) = event { Task { await self?.sendHello() } }
+        if case .ready(peerConnected: true) = event { Task { await self?.sendHello() } }
+      })
     retryTask = Task { [weak self] in
       while !Task.isCancelled {
         await self?.sendHello()
@@ -60,7 +65,7 @@ final class RemoteRelayClient: @unchecked Sendable {
   }
 
   func stop() {
-    let values = lock.withLock { () -> (RelayHTTPPeer?, Task<Void, Never>?) in
+    let values = lock.withLock { () -> (RelayWebSocketPeer?, Task<Void, Never>?) in
       wantsConnection = false
       let values = (peer, retryTask)
       peer = nil
