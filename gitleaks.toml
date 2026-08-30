@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Curve25519 type declarations are code, not embedded key values"
+targetRules = ["generic-api-key"]
+regexTarget = "match"
+regexes = [
+  '''pairingKey: Curve25519\.KeyAgreement\.PrivateKey''',
+]

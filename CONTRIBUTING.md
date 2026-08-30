@@ -14,6 +14,8 @@ npm audit
 npm run check
 npm test
 npx wrangler deploy --dry-run
+cd ..
+gitleaks git --redact --config gitleaks.toml .
 ```
 
 Generate `Eng.xcodeproj` from `project.yml` with XcodeGen before testing the iOS app.
