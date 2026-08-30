@@ -1,0 +1,22 @@
+{
+  "name": "@eng/relay-cloudflare",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end encrypted, channel-isolated relay for Eng on Cloudflare Workers",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260830.1",
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.127.1"
+  }
+}

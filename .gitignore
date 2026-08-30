@@ -11,3 +11,6 @@ xcuserdata/
 *.xcuserstate
 .ios-eng/
 *.log
+node_modules/
+.dev.vars
+.wrangler/
