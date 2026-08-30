@@ -88,6 +88,8 @@ public final class RelayWebSocketPeer: @unchecked Sendable {
       lock.withLock { socket = current }
       current.resume()
       do {
+        let keepAliveTask = Task { await keepAlive(current) }
+        defer { keepAliveTask.cancel() }
         while !Task.isCancelled {
           switch try await current.receive() {
           case .data(let data): emitPayload(.success(data))
@@ -126,8 +128,31 @@ public final class RelayWebSocketPeer: @unchecked Sendable {
     request.setValue(
       "Bearer \(configuration.credential.bearerToken)",
       forHTTPHeaderField: "Authorization")
-    request.timeoutInterval = 30
+    request.timeoutInterval = 120
     return request
+  }
+
+  private func keepAlive(_ socket: URLSessionWebSocketTask) async {
+    while !Task.isCancelled {
+      do {
+        try await Task.sleep(for: .seconds(20))
+        try await withCheckedThrowingContinuation {
+          (continuation: CheckedContinuation<Void, any Error>) in
+          socket.sendPing { error in
+            if let error {
+              continuation.resume(throwing: error)
+            } else {
+              continuation.resume()
+            }
+          }
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        socket.cancel(with: .goingAway, reason: nil)
+        return
+      }
+    }
   }
 
   private func emitControl(_ text: String) throws {
