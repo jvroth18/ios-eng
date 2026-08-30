@@ -36,6 +36,16 @@ describe("Eng Cloudflare relay", () => {
     expect((await connect(first.channelID, "phone", "invalid")).status).toBe(401);
   });
 
+  it("canonicalizes the uppercase UUID representation emitted by Swift", async () => {
+    const channel = await provision();
+    const response = await connect(
+      channel.channelID.toUpperCase(), "phone", channel.phoneToken,
+    );
+    expect(response.status).toBe(101);
+    response.webSocket!.accept();
+    response.webSocket!.close(1000, "test complete");
+  });
+
   it("revokes one channel without affecting another channel", async () => {
     const revoked = await provision();
     const retained = await provision();

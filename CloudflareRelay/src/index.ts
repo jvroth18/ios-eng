@@ -63,7 +63,7 @@ async function provision(request: Request, env: Env): Promise<Response> {
 async function revoke(request: Request, env: Env, channelID: string): Promise<Response> {
   if (!(await authorizedAdmin(request, env))) return json({ error: "unauthorized" }, 401);
   if (!isUUID(channelID)) return json({ error: "invalid_channel" }, 400);
-  return env.CHANNELS.get(env.CHANNELS.idFromName(channelID)).fetch(
+  return env.CHANNELS.get(env.CHANNELS.idFromName(channelID.toLowerCase())).fetch(
     "https://channel/internal/revoke",
     { method: "DELETE" },
   );
@@ -83,7 +83,7 @@ async function connect(request: Request, env: Env, url: URL): Promise<Response> 
   }
   const target = new URL("https://channel/connect");
   target.searchParams.set("role", role);
-  return env.CHANNELS.get(env.CHANNELS.idFromName(channelID)).fetch(
+  return env.CHANNELS.get(env.CHANNELS.idFromName(channelID.toLowerCase())).fetch(
     new Request(target, request),
   );
 }
