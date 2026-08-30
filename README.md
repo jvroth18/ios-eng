@@ -2,10 +2,11 @@
 
 Eng is a private, native iPhone companion for Codex work running on your Mac. It groups threads by the repository they are working in, mirrors conversation and tool activity, lets you send or steer work from the phone, surfaces approvals when the Mac session supports them, and shows live phone/Mac diagnostics.
 
-The repository contains three pieces:
+The repository contains four pieces:
 
 - `EngCore`: the versioned, tested wire protocol and shared models.
 - `EngBridge`: a Mac companion that connects to Codex App Server and advertises encrypted nearby and direct-local sessions.
+- `EngRelay`: a self-hosted, loopback-by-default opaque frame relay for remote access.
 - `Eng`: a deliberately small SwiftUI iPhone app with Projects, Thread, Analytics, and Config surfaces, drawn in a classic Windows 9x "analog" style (beveled windows, tab pages, LEDs, and a green-phosphor system monitor) from the `EngApp/Design/Win95.swift` kit.
 
 ## Product boundary
@@ -96,10 +97,39 @@ The generated Xcode project is intentionally ignored; `project.yml` is its sourc
 The first phone opened during the bridge pairing window is remembered automatically. The short Mac-terminal code remains available for a replacement phone; normal reconnects do not require it. For USB-C, enable iPhone Personal Hotspot and connect the trusted cable so Apple exposes an `iPhone USB` network interface to Network Framework. Analytics retains only the most recent 90 in-memory samples per device. Exact iPhone temperature is not available through Apple’s public API, so Eng reports `ProcessInfo.thermalState` categories instead of degrees.
 
 The Config tab persists a connection preference (`Automatic`, `USB-C first`,
-`Wi-Fi first`, or `Nearby only`) and pinned focus folders. USB-C and Wi-Fi
+`Wi-Fi first`, `Nearby only`, or `Remote only`) and pinned focus folders. USB-C and Wi-Fi
 preferences keep Nearby available as a recovery path. iOS does not expose an
 app API that keeps USB-C data active while disabling charging, so Eng controls
 only its data route and never presents a charging switch it cannot enforce.
+
+## Self-hosted remote access
+
+Remote access does not require another iPhone app. Create a private channel on the
+relay host, keep the generated file secret, and run the relay behind an HTTPS reverse
+proxy:
+
+```sh
+swift run eng-relay issue --output /secure/path/eng-channel.json
+swift run eng-relay serve --credentials /secure/path/eng-channel.json --port 8787
+```
+
+The listener binds `127.0.0.1` unless `--public-bind` is explicitly supplied. Keep
+it on loopback and forward only HTTPS requests from the reverse proxy. Copy the HTTPS
+URL, channel UUID, and Base64 token from the credential file into Eng's Config tab.
+The token is stored in iPhone Keychain.
+
+Start the Mac bridge with the same channel and public HTTPS URL:
+
+```sh
+ENG_RELAY_URL=https://eng-relay.example.com \
+ENG_RELAY_CREDENTIALS=/secure/path/eng-channel.json \
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift run eng-bridge
+```
+
+Both devices make outbound HTTPS requests, so no inbound home-router port is needed.
+Local USB-C/Wi-Fi remains preferred in Automatic mode. The relay receives only public
+pairing material and bounded AES-GCM ciphertext; Codex App Server remains on Mac
+loopback. Revoke access by issuing a new channel and replacing both configurations.
 
 The running bridge publishes its owned loopback port and process identifier to
 `~/Library/Application Support/EngBridge/runtime.json`. `Scripts/codex-eng`
@@ -108,4 +138,4 @@ and still honors an explicit `IOS_ENG_CODEX_PORT` override.
 
 ## Privacy
 
-Eng is local-first. It does not contain an OpenAI API key, copy Codex authentication to the phone, or expose Codex App Server. Its Bonjour TCP listener performs Curve25519 key agreement, pins both device identities, and accepts only authenticated AES-GCM frames. Diagnostic history is short-lived and remains on the two devices.
+Eng is local-first. It does not contain an OpenAI API key, copy Codex authentication to the phone, or expose Codex App Server. Its Bonjour TCP listener and optional remote relay path perform Curve25519 key agreement, pin both device identities, and accept only authenticated AES-GCM frames. Remote channel tokens stay in the relay's protected credential file and iPhone Keychain. Diagnostic history is short-lived and remains on the two devices.

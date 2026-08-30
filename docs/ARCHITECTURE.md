@@ -9,8 +9,8 @@ Codex CLI / IDE threads
           v
      EngBridge on Mac
           |
-          | encrypted Nearby Auto or authenticated direct local
-          | (USB-C/wired preferred, then Wi-Fi)
+          | encrypted Nearby Auto, authenticated direct local,
+          | or outbound HTTPS through the opaque Eng Relay
           v
         Eng on iPhone
 ```
@@ -58,6 +58,20 @@ The transport boundary is shared by the bridge coordinator and phone store, so C
 The fallback `Nearby Auto` transport uses `MCSession` with required encryption. On iOS, Apple may carry that session over infrastructure Wi-Fi, peer-to-peer Wi-Fi, or Bluetooth. The framework does not expose which bearer it selected, so Eng labels the path `Nearby Auto` rather than making an unsupported radio claim.
 
 Protocol v5 carries transport identity, direct-session key material, the account-aware model catalog, and existing-thread model updates. Network Framework discovers the Mac through Bonjour on every eligible local interface. The phone prefers a discovered wired-Ethernet interface—which is how Apple exposes USB Personal Hotspot—then Wi-Fi or another local path. A Curve25519 agreement protects the initial pair exchange; the phone and Mac persistently pin each other's public identities, and accepted sessions rotate to a short-lived random 256-bit AES-GCM credential. Nearby remains the fallback.
+
+Remote Relay is a third implementation of the same transport boundary. The iPhone
+and Mac independently poll and post bounded frames to a channel-specific HTTPS
+endpoint. Automatic mode still prioritizes direct local connectivity. The relay
+authenticates the channel token, caps each peer queue, expires idle channels, and
+routes frames only to the opposite role. It never receives a transport bootstrap or
+decryption key: the existing Curve25519 exchange is forwarded as public pairing
+material, and all subsequent `BridgeEnvelope` values remain AES-GCM ciphertext.
+
+The relay service binds loopback by default and is designed for HTTPS termination by
+a narrowly configured reverse proxy. Non-loopback HTTP URLs are rejected by both
+clients. The relay channel token is stored in a mode-0600 file on the server/Mac and
+with after-first-unlock, this-device-only protection in iPhone Keychain. Neither the
+relay nor its reverse proxy forwards the Codex App Server port.
 
 A USB-C cable alone is only a trusted device/developer connection and is not a public application data channel. USB-C transport therefore requires Personal Hotspot to expose `iPhone USB` as a network interface. Eng does not use `usbmuxd`, developer port forwarding, private frameworks, or MFi accessory protocols.
 
@@ -110,7 +124,7 @@ the Mac thread is never archived, deleted, or otherwise mutated.
 
 ## Failure behavior
 
-- Connection loss keeps the last snapshot visible with a stale timestamp and reconnects nearby.
+- Connection loss keeps the last snapshot visible with a stale timestamp and retries eligible local and remote routes.
 - A supervisor health-checks the loopback App Server, replaces a failed child with bounded exponential backoff, reinitializes the WebSocket exactly once per connection, and restores desired thread subscriptions.
 - UI controls use direct App Server methods only after a live `thread/resume` subscription. `Mac Live` controls instead use the separately validated queue and interactive-CLI Stop paths.
 - A message is not shown as delivered until the bridge acknowledges its Codex operation.

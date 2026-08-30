@@ -67,11 +67,16 @@ final class BridgeStore: ObservableObject {
     }
   }
   @Published var pairingCode = ""
+  @Published var remoteURL = ""
+  @Published var remoteChannelID = ""
+  @Published var remoteToken = ""
+  @Published private(set) var remoteConfigured = false
   @Published var presentedError: BridgeError?
 
   private let deviceID: UUID
   private let client: any BridgeClientTransport
   private let preferences: UserDefaults
+  private let remoteSecrets: any RemoteRelaySecretStoring
   private let telemetrySampler = PhoneTelemetrySampler()
   private let demoMode: Bool
   private let automaticPairingCode: String?
@@ -101,9 +106,11 @@ final class BridgeStore: ObservableObject {
   /// so store logic (paging, timeline merging, link probes) runs without radios.
   init(
     client: (any BridgeClientTransport)?, arguments: [String],
-    preferences: UserDefaults = .standard
+    preferences: UserDefaults = .standard,
+    remoteSecrets: any RemoteRelaySecretStoring = KeychainRemoteRelaySecretStore()
   ) {
     self.preferences = preferences
+    self.remoteSecrets = remoteSecrets
     pinnedProjectIDs = Set(preferences.stringArray(forKey: PreferenceKey.pinnedProjectIDs) ?? [])
     unreadThreadIDs = Set(preferences.stringArray(forKey: PreferenceKey.unreadThreadIDs) ?? [])
     hiddenThreadIDs = Set(preferences.stringArray(forKey: PreferenceKey.hiddenThreadIDs) ?? [])
@@ -117,6 +124,8 @@ final class BridgeStore: ObservableObject {
     connectionPreference =
       preferences.string(forKey: PreferenceKey.connectionPreference)
       .flatMap(ConnectionPreference.init(rawValue:)) ?? .automatic
+    remoteURL = preferences.string(forKey: PreferenceKey.remoteURL) ?? ""
+    remoteChannelID = preferences.string(forKey: PreferenceKey.remoteChannelID) ?? ""
     demoMode = arguments.contains("-eng-demo")
     if let index = arguments.firstIndex(of: "-eng-pair-code"),
       arguments.indices.contains(index + 1)
@@ -135,6 +144,12 @@ final class BridgeStore: ObservableObject {
       }
     }
     self.client.setConnectionPreference(connectionPreference)
+    if let configuration = Self.loadRemoteConfiguration(
+      from: preferences, remoteSecrets: remoteSecrets)
+    {
+      remoteConfigured = true
+      self.client.configureRemote(configuration)
+    }
     if demoMode { applyDemoState() }
   }
 
@@ -223,6 +238,41 @@ final class BridgeStore: ObservableObject {
           deviceName: UIDevice.current.name,
           identityPublicKey: client.identityPublicKey
         )))
+  }
+
+  func saveRemoteConnection() {
+    do {
+      guard let url = URL(string: remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+        let channelID = UUID(uuidString: remoteChannelID.trimmingCharacters(in: .whitespacesAndNewlines)),
+        let token = Data(base64Encoded: remoteToken.trimmingCharacters(in: .whitespacesAndNewlines))
+          ?? remoteSecrets.load()
+      else { throw RemoteRelayError.invalidResponse }
+      let credential = try RelayChannelCredential(channelID: channelID, token: token)
+      let configuration = try RemoteRelayConfiguration(baseURL: url, credential: credential)
+      try remoteSecrets.save(token)
+      preferences.set(configuration.baseURL.absoluteString, forKey: PreferenceKey.remoteURL)
+      preferences.set(channelID.uuidString, forKey: PreferenceKey.remoteChannelID)
+      remoteURL = configuration.baseURL.absoluteString
+      remoteChannelID = channelID.uuidString
+      remoteToken = ""
+      remoteConfigured = true
+      client.configureRemote(configuration)
+    } catch {
+      presentedError = BridgeError(
+        code: "remote_configuration", message: error.localizedDescription, recoverable: true)
+    }
+  }
+
+  func removeRemoteConnection() {
+    client.configureRemote(nil)
+    remoteSecrets.remove()
+    preferences.removeObject(forKey: PreferenceKey.remoteURL)
+    preferences.removeObject(forKey: PreferenceKey.remoteChannelID)
+    remoteURL = ""
+    remoteChannelID = ""
+    remoteToken = ""
+    remoteConfigured = false
+    if connectionPreference == .remoteOnly { connectionPreference = .automatic }
   }
 
   func refresh(threadID: String? = nil) {
@@ -824,6 +874,22 @@ final class BridgeStore: ObservableObject {
     static let hiddenThreadIDs = "eng.hidden-thread-ids"
     static let observedThreadUpdates = "eng.observed-thread-updates"
     static let threadDrafts = "eng.thread-drafts"
+    static let remoteURL = "eng.remote-url"
+    static let remoteChannelID = "eng.remote-channel-id"
+  }
+
+  private static func loadRemoteConfiguration(
+    from preferences: UserDefaults,
+    remoteSecrets: any RemoteRelaySecretStoring
+  ) -> RemoteRelayConfiguration? {
+    guard let value = preferences.string(forKey: PreferenceKey.remoteURL),
+      let url = URL(string: value),
+      let channel = preferences.string(forKey: PreferenceKey.remoteChannelID),
+      let channelID = UUID(uuidString: channel),
+      let token = remoteSecrets.load(),
+      let credential = try? RelayChannelCredential(channelID: channelID, token: token)
+    else { return nil }
+    return try? RemoteRelayConfiguration(baseURL: url, credential: credential)
   }
 
   private func markThreadUnread(_ threadID: String, detail: String) {

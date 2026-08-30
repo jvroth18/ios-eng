@@ -12,9 +12,13 @@ final class FakeBridgeClient: BridgeClientTransport, @unchecked Sendable {
   private var handler: (@Sendable (BridgeClientEvent) -> Void)?
   private var outbound: [BridgeEnvelope] = []
   private var preferences: [ConnectionPreference] = []
+  private var remoteConfigurations: [RemoteRelayConfiguration?] = []
 
   var sent: [BridgeMessage] { lock.withLock { outbound.map(\.message) } }
   var appliedPreferences: [ConnectionPreference] { lock.withLock { preferences } }
+  var appliedRemoteConfigurations: [RemoteRelayConfiguration?] {
+    lock.withLock { remoteConfigurations }
+  }
 
   init(identityPublicKey: Data? = nil) {
     self.identityPublicKey = identityPublicKey
@@ -31,10 +35,21 @@ final class FakeBridgeClient: BridgeClientTransport, @unchecked Sendable {
   func setConnectionPreference(_ preference: ConnectionPreference) {
     lock.withLock { preferences.append(preference) }
   }
+  func configureRemote(_ configuration: RemoteRelayConfiguration?) {
+    lock.withLock { remoteConfigurations.append(configuration) }
+  }
 
   func emit(_ event: BridgeClientEvent) {
     lock.withLock { handler }?(event)
   }
+}
+
+final class FakeRemoteRelaySecretStore: RemoteRelaySecretStoring, @unchecked Sendable {
+  private let lock = NSLock()
+  private var token: Data?
+  func load() -> Data? { lock.withLock { token } }
+  func save(_ token: Data) { lock.withLock { self.token = token } }
+  func remove() { lock.withLock { token = nil } }
 }
 
 @MainActor
@@ -66,6 +81,27 @@ struct BridgeStoreTests {
     let second = BridgeStore(client: secondClient, arguments: [], preferences: defaults)
     #expect(second.connectionPreference == .preferWiFi)
     #expect(secondClient.appliedPreferences.last == .preferWiFi)
+  }
+
+  @Test func remoteConfigurationUsesValidatedFieldsAndCanBeRemoved() throws {
+    let defaults = Self.isolatedPreferences()
+    let client = FakeBridgeClient()
+    let secrets = FakeRemoteRelaySecretStore()
+    let store = BridgeStore(
+      client: client, arguments: [], preferences: defaults, remoteSecrets: secrets)
+    let credential = try RelayChannelCredential.generate()
+    store.remoteURL = "https://relay.example.com"
+    store.remoteChannelID = credential.channelID.uuidString
+    store.remoteToken = credential.bearerToken
+
+    store.saveRemoteConnection()
+
+    #expect(store.remoteConfigured)
+    #expect(store.remoteToken.isEmpty)
+    #expect(client.appliedRemoteConfigurations.last!?.credential == credential)
+    store.removeRemoteConnection()
+    #expect(!store.remoteConfigured)
+    #expect(client.appliedRemoteConfigurations.last! == nil)
   }
 
   @Test func folderPinsAndPinnedOnlyFocusPersist() {

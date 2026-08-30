@@ -7,6 +7,7 @@ struct ConfigView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
         connectionGroup
+        remoteGroup
         focusGroup
         hiddenThreadsGroup
         timeGroup
@@ -15,6 +16,44 @@ struct ConfigView: View {
     }
     .scrollIndicators(.hidden)
     .background(Win95.face)
+  }
+
+  private var remoteGroup: some View {
+    Win95GroupBox(title: "Remote connection") {
+      VStack(alignment: .leading, spacing: 7) {
+        HStack(spacing: 6) {
+          Win95LED(color: store.remoteConfigured ? Win95.ledGreen : Win95.ledOff)
+          Text(store.remoteConfigured ? "Private relay configured" : "Not configured")
+            .font(Win95Font.bold)
+        }
+        TextField("https://relay.example.com", text: $store.remoteURL)
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+          .font(Win95Font.monoSmall)
+          .win95Field()
+        TextField("Channel UUID", text: $store.remoteChannelID)
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+          .font(Win95Font.monoSmall)
+          .win95Field()
+        SecureField(store.remoteConfigured ? "Channel token saved in Keychain" : "Base64 channel token", text: $store.remoteToken)
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+          .font(Win95Font.monoSmall)
+          .win95Field()
+        Text("The token stays in this iPhone's Keychain. Codex data remains encrypted between this phone and your Mac; the relay only routes ciphertext.")
+          .font(Win95Font.small)
+          .fixedSize(horizontal: false, vertical: true)
+        HStack {
+          Button(store.remoteConfigured ? "Update" : "Save") { store.saveRemoteConnection() }
+            .buttonStyle(Win95ButtonStyle(isDefault: true))
+          if store.remoteConfigured {
+            Button("Remove") { store.removeRemoteConnection() }
+              .buttonStyle(Win95ButtonStyle())
+          }
+        }
+      }
+    }
   }
 
   private var connectionGroup: some View {
