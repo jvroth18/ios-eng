@@ -157,6 +157,29 @@ struct BridgeStoreTests {
     #expect(!second.isProjectPinned("ios-eng"))
   }
 
+  @Test func activityFilterDefaultsToActiveAndPersists() {
+    let defaults = Self.isolatedPreferences()
+    let first = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
+    #expect(first.activityFilter == .active)
+
+    first.activityFilter = .week
+
+    let second = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
+    #expect(second.activityFilter == .week)
+  }
+
+  @Test func activityFilterControlsTheCompleteDisplayedWorkspace() {
+    let (store, _) = Self.makeStore()
+    let active = Self.thread("active", status: .active)
+    let idle = Self.thread("idle", status: .idle)
+    store.receive(BridgeEnvelope(message: .workspaceSnapshot(Self.workspace([active, idle]))))
+
+    #expect(store.displayedProjects.flatMap(\.threads).map(\.id) == ["active"])
+
+    store.activityFilter = .all
+    #expect(Set(store.displayedProjects.flatMap(\.threads).map(\.id)) == Set(["active", "idle"]))
+  }
+
   @Test func perThreadDraftsPersistAndClearIndependently() {
     let defaults = Self.isolatedPreferences()
     let first = BridgeStore(client: FakeBridgeClient(), arguments: [], preferences: defaults)
@@ -205,10 +228,15 @@ struct BridgeStoreTests {
     #expect(second.draftCount == 2)
   }
 
-  private static func thread(_ id: String, updatedAt: Date = now) -> ThreadSummary {
+  private static func thread(
+    _ id: String,
+    updatedAt: Date = now,
+    status: ThreadRuntimeStatus = .active
+  ) -> ThreadSummary {
     ThreadSummary(
       id: id, title: "Thread \(id)", preview: "", cwd: "/tmp/\(id)", repositoryRoot: "/tmp/\(id)",
-      source: "cli", status: .active, controlLevel: .live, activeTurnID: "turn-\(id)",
+      source: "cli", status: status, controlLevel: .live,
+      activeTurnID: status == .active ? "turn-\(id)" : nil,
       updatedAt: updatedAt)
   }
 

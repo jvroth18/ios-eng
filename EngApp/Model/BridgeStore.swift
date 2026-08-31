@@ -35,6 +35,43 @@ struct ThreadUnreadNotification: Identifiable, Equatable, Sendable {
   var id: String { threadID }
 }
 
+enum ThreadActivityFilter: String, CaseIterable, Identifiable, Sendable {
+  case active = "active"
+  case day = "day"
+  case week = "week"
+  case all = "all"
+
+  var id: String { rawValue }
+
+  var label: String {
+    switch self {
+    case .active: "Active now"
+    case .day: "Last 24 hours"
+    case .week: "Last 7 days"
+    case .all: "All history"
+    }
+  }
+
+  var detail: String {
+    switch self {
+    case .active: "Only running threads and threads waiting for you."
+    case .day: "Active threads plus anything updated in the last day."
+    case .week: "Active threads plus anything updated in the last week."
+    case .all: "Every thread returned by Codex, including inactive history."
+    }
+  }
+
+  func includes(_ thread: ThreadSummary, now: Date = Date()) -> Bool {
+    if thread.status == .active || thread.status == .waiting { return true }
+    switch self {
+    case .active: return false
+    case .day: return thread.updatedAt >= now.addingTimeInterval(-86_400)
+    case .week: return thread.updatedAt >= now.addingTimeInterval(-604_800)
+    case .all: return true
+    }
+  }
+}
+
 @MainActor
 final class BridgeStore: ObservableObject {
   @Published private(set) var connection: BridgeConnectionState = .searching
@@ -59,6 +96,17 @@ final class BridgeStore: ObservableObject {
   @Published private(set) var threadDrafts: [String: String]
   @Published var focusPinnedOnly: Bool {
     didSet { preferences.set(focusPinnedOnly, forKey: PreferenceKey.focusPinnedOnly) }
+  }
+  @Published var activityFilter: ThreadActivityFilter {
+    didSet {
+      preferences.set(activityFilter.rawValue, forKey: PreferenceKey.activityFilter)
+      if let notification = unreadNotification,
+        let thread = projects.flatMap(\.threads).first(where: { $0.id == notification.threadID }),
+        !activityFilter.includes(thread)
+      {
+        unreadNotification = nil
+      }
+    }
   }
   @Published var connectionPreference: ConnectionPreference {
     didSet {
@@ -121,6 +169,9 @@ final class BridgeStore: ObservableObject {
       preferences.dictionary(forKey: PreferenceKey.observedThreadUpdates) as? [String: Double]
       ?? [:]
     focusPinnedOnly = preferences.bool(forKey: PreferenceKey.focusPinnedOnly)
+    activityFilter =
+      preferences.string(forKey: PreferenceKey.activityFilter)
+      .flatMap(ThreadActivityFilter.init(rawValue:)) ?? .active
     let storedConnectionPreference =
       preferences.string(forKey: PreferenceKey.connectionPreference)
       .flatMap(ConnectionPreference.init(rawValue:)) ?? .automatic
@@ -177,6 +228,28 @@ final class BridgeStore: ObservableObject {
   }
 
   var projects: [ProjectSummary] { workspace?.projects ?? [] }
+
+  var displayedProjects: [ProjectSummary] {
+    let now = Date()
+    return projects.compactMap { project in
+      let threads = project.threads.filter {
+        activityFilter.includes($0, now: now) && !hiddenThreadIDs.contains($0.id)
+      }
+      guard !threads.isEmpty else { return nil }
+      return ProjectSummary(
+        id: project.id,
+        name: project.name,
+        repositoryRoot: project.repositoryRoot,
+        gitOrigin: project.gitOrigin,
+        threads: threads,
+        updatedAt: threads.map(\.updatedAt).max() ?? project.updatedAt
+      )
+    }
+  }
+
+  var displayedThreads: [ThreadSummary] { displayedProjects.flatMap(\.threads) }
+
+  var displayedUnreadCount: Int { unreadCount(in: displayedThreads) }
 
   var pinnedProjectCount: Int {
     projects.lazy.filter { self.pinnedProjectIDs.contains($0.id) }.count
@@ -606,7 +679,9 @@ final class BridgeStore: ObservableObject {
       let isNewActivity = previous.map { timestamp > $0 + 0.001 } ?? hadWorkspace
       if isNewActivity, visibleThreadID != thread.id, !hiddenThreadIDs.contains(thread.id) {
         unreadThreadIDs.insert(thread.id)
-        if newestUnread == nil || thread.updatedAt > newestUnread!.updatedAt {
+        if activityFilter.includes(thread),
+          newestUnread == nil || thread.updatedAt > newestUnread!.updatedAt
+        {
           newestUnread = thread
         }
       }
@@ -892,6 +967,7 @@ final class BridgeStore: ObservableObject {
   private enum PreferenceKey {
     static let pinnedProjectIDs = "eng.pinned-project-ids"
     static let focusPinnedOnly = "eng.focus-pinned-only"
+    static let activityFilter = "eng.activity-filter"
     static let connectionPreference = "eng.connection-preference"
     static let unreadThreadIDs = "eng.unread-thread-ids"
     static let hiddenThreadIDs = "eng.hidden-thread-ids"

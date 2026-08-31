@@ -10,6 +10,7 @@ struct ConfigView: View {
       VStack(alignment: .leading, spacing: 12) {
         connectionGroup
         remoteGroup
+        activityGroup
         focusGroup
         hiddenThreadsGroup
         timeGroup
@@ -20,6 +21,41 @@ struct ConfigView: View {
     .background(Win95.face)
     .fileImporter(isPresented: $isImportingRemote, allowedContentTypes: [.json]) { result in
       if case .success(let url) = result { store.importRemoteConnection(from: url) }
+    }
+  }
+
+  private var activityGroup: some View {
+    Win95GroupBox(title: "Activity filter") {
+      VStack(alignment: .leading, spacing: 7) {
+        Text("This controls the complete thread list shown on the Projects tab.")
+          .font(Win95Font.small)
+          .fixedSize(horizontal: false, vertical: true)
+
+        ForEach(ThreadActivityFilter.allCases) { filter in
+          Button {
+            store.activityFilter = filter
+          } label: {
+            HStack(alignment: .top, spacing: 7) {
+              Image(
+                systemName: store.activityFilter == filter
+                  ? "circle.inset.filled" : "circle"
+              )
+              .font(.system(size: 13))
+              VStack(alignment: .leading, spacing: 2) {
+                Text(filter.label)
+                  .font(Win95Font.bold)
+                Text(filter.detail)
+                  .font(Win95Font.small)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+              Spacer(minLength: 0)
+            }
+            .foregroundStyle(Win95.text)
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+        }
+      }
     }
   }
 

@@ -96,7 +96,8 @@ struct RootView: View {
   }
 
   private var projectsTabLabel: String {
-    store.unreadCount == 0 ? "Projects" : "Projects (\(store.unreadCount))"
+    store.displayedUnreadCount == 0
+      ? "Projects" : "Projects (\(store.displayedUnreadCount))"
   }
 
   private func unreadBanner(_ notification: ThreadUnreadNotification) -> some View {

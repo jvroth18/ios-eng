@@ -4,7 +4,6 @@ import SwiftUI
 struct ProjectsView: View {
   @EnvironmentObject private var store: BridgeStore
   @State private var query = ""
-  @State private var activeOnly = false
   @State private var collapsedProjects: Set<String> = []
   @State private var expandedProjects: Set<String> = []
   @Namespace private var threadTransition
@@ -23,16 +22,13 @@ struct ProjectsView: View {
           .autocorrectionDisabled()
           .textInputAutocapitalization(.never)
           .win95Field()
-        Win95Checkbox(label: "Active", isOn: $activeOnly)
       }
 
       Win95StatusBar(items: [
         "\(visibleProjects.count) shown",
         "\(allThreads.count) threads",
-        "\(store.unreadCount) unread",
-        "\(store.draftCount) drafts",
-        "\(store.pinnedProjectCount) pinned",
-        "\(liveThreads.count) live",
+        "\(store.unreadCount(in: allThreads)) unread",
+        store.activityFilter.label,
       ])
 
       ScrollView {
@@ -75,7 +71,7 @@ struct ProjectsView: View {
       Text(
         store.projects.isEmpty
           ? "Start a thread from your IDE with Scripts/codex-eng. It will appear here."
-          : "Try a different search or turn off the Active filter."
+          : "Try a different search or broaden Activity Filter in Config."
       )
       .font(Win95Font.small)
       .foregroundStyle(Win95.text)
@@ -87,23 +83,19 @@ struct ProjectsView: View {
   }
 
   private var allThreads: [ThreadSummary] {
-    store.projects.flatMap(\.threads).filter { !store.isThreadHidden($0.id) }
+    store.displayedThreads
   }
-  private var liveThreads: [ThreadSummary] { allThreads.filter { $0.controlLevel == .live } }
 
-  /// Projects sorted by most recent thread activity, filtered by the search field and
-  /// the Active checkbox. A query that matches the project itself keeps every thread;
+  /// Projects filtered by the persistent activity setting and search field. A query
+  /// that matches the project itself keeps every activity-matching thread;
   /// otherwise only matching threads are listed.
   private var visibleProjects: [ProjectEntry] {
     let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     return
-      store.projects
+      store.displayedProjects
       .filter { !store.focusPinnedOnly || store.isProjectPinned($0.id) }
       .compactMap { project -> ProjectEntry? in
-        var threads = project.threads.filter { !store.isThreadHidden($0.id) }
-        if activeOnly {
-          threads = threads.filter { $0.status == .active || $0.status == .waiting }
-        }
+        var threads = project.threads
         if !needle.isEmpty {
           let projectMatches =
             project.name.lowercased().contains(needle)
